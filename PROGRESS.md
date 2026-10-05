@@ -150,10 +150,35 @@ The original hitas `Makefile` is Windows/MinGW + SWIG + hardcoded CPLEX/XPRESS/S
 - `S_CRPauditing` calls `S_loadsubproblem` (builds the audit LP via `Highs_passLp`, MAXIMIZE) then `S_solvesubproblem` per unsafe cell.
 - **Verified**: `libCRP.dylib` links `libhighs.1.dylib`; `S_CRP{open,close,loadprob,optimize,printsolution,auditing,free}prob` all export; dlopen smoke + a 2-cell MIP (total-25) solved correctly (a 12→10, b 13→15, obj 4).
 
+## Python port — state (this session)
+The headless Python CLI path is **end-to-end functional** for the microdata flow. `data/TestRecode.arb` runs to completion (open → metadata → 2 tables → compute → 3 recodes → GOINTERACTIVE no-op) with **47 tests green**.
+
+### What works (verified by `python/tests/`, 47 passing)
+- **pybind11 module** (`python/cpp/bind_{core,hitas,rounder}.cpp`) builds, links, and exports ~54 `TauArgus` methods + `HiTaSCtrl` + `RounderCtrl`. Wheel builds via `uv build --wheel` (self-contained: 3 dylibs co-located, `@loader_path` rpath). Smoke: `TauArgus().version()`→`1.1.4.11`.
+- **`batch.py`** — legacy-compatible `.arb` parser (18 command dataclasses, tokenizer, status machine). 19 tests pin the exact command sequences for `TestRecode.arb` + `tableinput/TestTable.arb`.
+- **`engine.py`** — `parse_rda` (micro) + `parse_rda_table` (tabular) mirror `Metadata.readMicroMetadata`/`readTableMetadata`; 20 metadata tests pin variable structure for `tau_testW.rda` (14 vars) and `pp.rda` (11 vars).
+- **Engine orchestration** (`Engine.run_batch` → `_execute`) drives the native engine: `clean_all` → `set_in_file_info` → `set_number_var` → per-var `set_variable`/`set_hierarchical_codelist`/`set_hierarchical_digits` → `explore_file` → `set_number_tab` → per-table `set_table`/`set_table_safety` → `compute_tables` → recodes. 8 smoke tests assert 2 tables, correct explanatory vars, finite min cell, recodes applied.
+
+### Native-call fidelity fixes made this session (engine.py)
+- `set_variable`: kwargs `is_numeric`/`is_hierarchical` (not `is_num`/`is_hier`); `is_peeper` = `is_request` (Java `Type.REQUEST`).
+- `set_hierarchical_digits`: trim trailing-zero levels before calling (native rejects any `nDigits[i] < 1`; requires digit-sum == varLen). Java counts up to last non-zero.
+- `set_table`: `max_scaled_cost` must be `>= 1` (native rejects `< 1`; Java default `20000`); shadow var defaults to response var when unspecified (native rejects `-1` on non-frequency tables, matching `TableSet.indexOfShadowVariable`); `peep_var` = REQUEST var index.
+- `set_table_safety`: `apply_holding` thresholds must match `TableSet.readSafetyRule` exactly — P: `nPq >= 2 && pqP>0`; NK: `nDom >= 2`; FREQ: `nFreq >= 1 && minFreq>0`. (Earlier `>=1`/`>=0` wrongly flagged holding for a single/second rule and failed native's `ApplyHolding && m_VarNrHolding < 0` check.)
+- **Recode** (`batch.batchRecode`) has three paths, all implemented:
+  1. digit `1..9` → hierarchical truncation (deactivate level-== maxLevel nodes with children, `do_active_recode`);
+  2. `<TREERECODE>` file → deactivate each listed parent code by `get_var_code` string lookup, `do_active_recode` (the native `DoRecode` **cannot** parse bare tree codes — they lack `dest : src`);
+  3. other file → classic `DoRecode` (`dest : src` spec).
+
+### Known / open
+- **`open_microdata` calls `clean_all`** which may wipe tables/safety set earlier in a batch run. In the current flow tables are (re)finalized *after* `open_microdata` (`read_microdata` → `_finalize_tables`), so it's currently safe — but re-verify if ordering changes.
+- Suppression (`MOD`/`OPT`/`RND`/`CKM`) is bound but **not yet exercised** by a test batch (the sample `.arb` ends at GOINTERACTIVE, no `<SUPPRESS>`).
+- No golden output files in `data/`; "behaves like legacy" is pinned via deterministic parser tests + structural invariants.
+
 ## Next Move
-1. **Task 6 — Dockerize / cloud-native packaging.** Write a `Dockerfile` (manylinux base, HiGHS + build deps, superbuild via `native/CMakeLists.txt`) producing a portable image; document the reproducible build. (Task 1's remaining sub-items are all checked off except the Dockerfile itself.)
-2. **Task 2 — pybind11 bindings** replacing SWIG/JNI for the headless path (hitas `FullJJ`, crp `do_round`, csp `CSP*`). pybind11 not yet installed on this machine.
-3. End-to-end verification against `data/` sample `.asc`/`.arb`/`.ttf` files once bindings exist.
+1. **Suppress + round + audit** smoke: author/extend a `.arb` (or drive the Engine directly) that runs `<SUPPRESS> MOD/OPT/RND` on the computed sample tables, and assert post-suppression invariants (no cell violates its protection level, rounded cells respect LPL/UPL). This is the last untested leg of the headless path.
+2. **Task 6 — Dockerize / cloud-native packaging** (manylinux image, HiGHS + build deps, superbuild).
+3. **Task 4 — CLI** (`tauargus/cli.py`: `run file.arb`, `tables`, `suppress`, `round`, `audit`, `save`).
+4. **Task 8 — Remove Java traces** (`src/`, `nbproject/`, SWIG wrappers, etc.) once the Python path is fully verified.
 
 ## Notes / decisions
 - "Open source solver" = replace CPLEX/XPRESS usage with HiGHS (csp) + SCIP (crp). Both already installed on this machine; csp/crp CMake already support them.

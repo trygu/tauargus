@@ -113,7 +113,7 @@ void init_core(py::module_ &m) {
         }, py::arg("index"), py::arg("explanatory_vars"), py::arg("is_frequency"),
            py::arg("response_var"), py::arg("shadow_var"), py::arg("cost_var"),
            py::arg("cellkey_var"), py::arg("ckm_type") = "", py::arg("ckm_topk") = 0,
-           py::arg("lambda") = 0.0, py::arg("max_scaled_cost") = 0.0,
+           py::arg("lam") = 0.0, py::arg("max_scaled_cost") = 0.0,
            py::arg("peep_var") = -1, py::arg("missing_as_safe") = false)
         .def("set_table_safety_info", [](TauArgus &t, long idx, bool has_maxscore,
              bool dom, const std::vector<long> &dom_n, const std::vector<long> &dom_p,
