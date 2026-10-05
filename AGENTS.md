@@ -15,7 +15,7 @@ replaces the Swing/Java frontend.
 ## Repository layout
 - `native/` — the real SDC engine, 5 **git submodules** (C/C++):
   `core` (static), `csp` (HiGHS-backed LP), `hitas` (links csp),
-  `crp` (controlled rounding, being ported SCIP→HiGHS), `rounder` (links crp).
+  `crp` (controlled rounding, HiGHS-backed), `rounder` (links crp).
   Build work happens *inside* each submodule — commit there, then bump the
   submodule pointer in the parent.
 - `src/tauargus/` — the legacy Java/Swing frontend (to be deleted, Task 8).
@@ -31,5 +31,10 @@ replaces the Swing/Java frontend.
 - The product is the **headless Python CLI + batch (`.arb`) path**, not GUI.
 - All solver backends converge on **HiGHS** (drop CPLEX/XPRESS/old-SCIP).
 - Prefer editing existing files; follow each file's conventions.
-- Don't commit unless asked. When asked, commit **submodules first**, then the
-  parent (submodule pointer + `PROGRESS.md` + any new top-level files).
+- **Commit early and often.** Commit at every verified checkpoint — a build
+  verified, a port completed, a test passing, a blocker cleared — not in one
+  big batch at the end. Commit **submodules first**, then the parent
+  (submodule pointer + `PROGRESS.md` + any new top-level files).
+- **Keep build artefacts out of git.** Python build outputs (`.venv/`,
+  `build/`, `dist/`, `*.so`, `*.dylib`) and `native/build/` are gitignored —
+  never stage them.
