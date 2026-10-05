@@ -36,16 +36,18 @@ Working branch: `rewrite`
 - [x] `native/core` configures + builds to `libtauargus_core.a` on macOS (warnings only: sprintf deprecations, 1 dangling-assignment in TauArgus.cpp:6020, 1 unused function).
 - [x] `native/csp` configures + builds to `libtauargus_csp.dylib` with HiGHS (`-DHighs_DIR=$(brew --prefix)/lib/cmake/Highs`). Warnings only (C-as-C++ deprecation, 1 unused var `cspgomo.c:57`). Exports `SCIPv::CSP*` (HiGHS-backed) + global `CSPdefinestoptime`, `JJ*`.
 - [x] `native/hitas` configures + builds to `libtauargus_hitas.dylib`, links `tauargus_csp` + HiGHS. Exports `HiTaSCtrl::{AHiTaS,FullJJ,SetJJconstants*,GetVersion,...}`. (See "hitas porting" notes below.)
-- [ ] `native/crp` — **in progress: rewrite SCIP backend to HiGHS** (same as csp). `crpSmain.c` = modern-SCIP MIP → `Highs_passMip`; `crpSaudit.c` = removed LPI LP → `Highs_passLp`+`Highs_getSolution`(duals). CPLEX/XPRESS paths already `#ifdef`-excluded. See "crp porting" notes.
-- [ ] `native/rounder` — Makefile only; needs CMakeLists (links `CRP`). Small: just `RounderCtrl.cpp` + `WrapCRP.h` (plain C API, no solver-specific code). Blocked until `crp` builds.
+- [x] `native/crp` — **DONE: rewired SCIP backend → HiGHS.** `libCRP.dylib` builds (links `libhighs.1.dylib`), all `S_CRP*` entry points export, and a numeric MIP test solves correctly (2-cell total constraint → a 12→10, b 13→15, obj LB=UB=4). Both `crpS*.c` now compile as **C++** (HiGHS header `const`s need C++ internal linkage). Banner silenced via `output_flag`+`log_to_console` (must re-apply after every `Highs_clear` — it resets options). See "crp porting" notes.
+- [x] `native/rounder` — **DONE: CMakeLists + build-verified.** `libtauargus_rounder.dylib` builds (links `libCRP.dylib`, exports `RounderCtrl::*`, dlopen `RTLD_NOW` OK). Removed the stale duplicated `src/WrapCRP.h` (drifted non-`extern` copy that would collide with CRP's C++ definitions); rounder now uses CRP's canonical header via a PUBLIC include dir. `RounderCtrl.h`'s `__declspec(dllexport)` → portable `ROUNDER_EXPORT` macro.
+- [x] **Top-level `native/CMakeLists.txt` superbuild** — builds all 5 modules (core, csp, hitas, crp, rounder) in one tree; all libs land in `native/build/lib/`. Auto-detects Homebrew HiGHS on macOS.
 
 ## TODO
 
 ### Task 1 — Open source solver + cloud native + portable  (in_progress)
 - [x] Build-verify `core`, `csp`, `hitas` on macOS with HiGHS.
-- [ ] Build-verify `crp` + `rounder` — blocked on SCIP LPI rewrite (see above).
-- [ ] Add CMakeLists for hitas (DONE) and rounder (mirror core/csp style).
-- [ ] Add a top-level `CMakeLists.txt` that builds all native modules in one superbuild. (Temp superbuild used at `/var/folders/.../opencode/tb_hitas/CMakeLists.txt`; make permanent under `native/`.)
+- [x] Build-verify `crp` on macOS with HiGHS (rewritten from SCIP; see notes).
+- [x] Build-verify `rounder` (CMakeLists links `CRP`).
+- [x] Add CMakeLists for rounder (mirror hitas style; hitas already done).
+- [x] Add a top-level `native/CMakeLists.txt` superbuild that builds all 5 modules in one tree.
 - [ ] Decide solver strategy for the Python port: keep C++ engine + open source LP solvers (HiGHS/SCIP) = "open source solver" requirement satisfied. Document it.
 - [ ] Dockerfile: manylinux/mac compatible image with HiGHS + build deps; or use cibuildwheel for wheels later.
 
@@ -134,8 +136,24 @@ The original hitas `Makefile` is Windows/MinGW + SWIG + hardcoded CPLEX/XPRESS/S
 - **`crpSmain.c`** (1037 lines, the main controlled-rounding **MIP**): currently *modern* SCIP (`SCIPcreate`, `SCIPcreateVar` w/ `SCIP_VARTYPE_BINARY/INTEGER/CONTINUOUS`, `SCIPaddCons`, `SCIPsolve`, `SCIPgetVars`). → Replace `SCIP*Env` global with `void* h = Highs_create()`; assemble model into CSC arrays + integrality vector; one `Highs_passMip`; `Highs_run`; check `Highs_getModelStatus`; read `Highs_getSolution(col_value, ...)`. Binary SCIP vars (bound [0,1]) map to integer + bounds [0,1].
 - **`crpSaudit.c`** (325 lines, the audit **LP** re-solved per variable with duals + reduced costs): currently the **removed SCIP 3.x LPI API** (`SCIPlpiCreate/AddCols/AddRows/ChgObj/ChgBounds/SolvePrimal/SolveDual/GetSol/GetCols`, `SCIP_LPI*`). → Build once with `Highs_passLp`; per iteration: `Highs_changeColCost`/`Highs_changeColBounds`/`Highs_changeColsCostBySet` + `Highs_run` + `Highs_getSolution(col_value, col_dual, row_value, row_dual)`. The old LPI code fetched `dj` (reduced costs) via `SCIPlpiGetSol` — HiGHS gives the same value directly in `col_dual`, so no manual `dj[k] = -Σ dual·coef` recompute is needed (that fallback only applies if HiGHS leaves `col_dual` unset for a non-optimized LP).
 - CPLEX (`crpCmain.c`) / XPRESS (`crpXmain.c`) already `#ifdef`-excluded. `WrapCRP.c` dispatch is clean (name routing only, no solver-specific code).
-- **CMake**: replace `USE_SCIP`/FetchContent-SCIP in `native/crp/CMakeLists.txt` with `find_package(Highs REQUIRED)` + `target_link_libraries(CRP PRIVATE highs::highs)`. Keep the `SCIPV` define to minimize churn (the "S" files simply become HiGHS-backed); optionally rename to a solver-neutral define later.
-Then `native/rounder` CMakeLists (links `CRP`) + top-level superbuild.
+- **CMake**: replaced `USE_SCIP`/FetchContent-SCIP in `native/crp/CMakeLists.txt` with `find_package(Highs REQUIRED)` + `target_link_libraries(CRP PRIVATE highs::highs)`. Kept the `SCIPV` define to minimize churn (the "S" files are now HiGHS-backed).
+
+### crp porting — implementation notes (verified, builds + numeric MIP test passes)
+- **Compile the two HiGHS files as C++** (`set_source_files_properties(src/crpSmain.c src/crpSaudit.c PROPERTIES LANGUAGE CXX)`). Reason: in **C**, `const` file-scope constants in `highs_c_api.h` (e.g. `kHighsIis*`) have *external* linkage → including the header in two TUs gives duplicate-symbol link errors. In **C++** they have internal linkage (one per TU) → link OK. (csp does the same thing.)
+- Consequence: the two files' **K&R function definitions were converted to ANSI** (K&R is illegal in C++11+). `exact.c`/`WrapCRP.c` stay C.
+- `crpmain.h`'s `CRPmessage`/`CRPextratime` global declarations were made `extern` — as bare file-scope declarations they are *tentative definitions* in C but *definitions* in C++, which clashed with the single real definition in `WrapCRP.c:32-33`.
+- **`ZERO`/`INF`/`MAX_TIME`**: declared `extern` directly in `crpSmain.c` (C linkage). Could NOT `#include "WrapCRP.h"` from a C++ TU: WrapCRP.h declares `CRPmessage`/`CRPextratime` *outside* its `extern "C"` block while `crpmain.h` declares them *inside* → "different language linkage" conflict.
+- **`Highs_inf` does not exist in the C API.** Use `#define CRP_HIGHS_INF 1.0e20` (HiGHS treats 1e20 as infinite; same as csp/Jjsolver.c).
+- **`Highs_clear()` resets ALL options to defaults** (re-enables `log_to_console`). The quiet options (`output_flag=0`, `log_to_console=0`) must be **re-applied after every `Highs_clear`** or the HiGHS banner + solve log flood stdout. (This is invisible to a smoke test that only calls open/close — the banner only appears on the first `Highs_run`.)
+- **`S_solvesubproblem` LPI dead code dropped**: the old `SCIPlpiGetBounds`/`ChgBounds` bound-tightening was a no-op (bound was reassigned to itself, so the restore-`if` never fired); `dj`/`dual`/`yval` outputs are always NULL at the only call site (`S_CRPauditing`), so only the objective value is read back (`Highs_changeColCost` ±1 → `Highs_run` → `Highs_getObjectiveValue`; flip sign for sense=-1).
+- **`S_MIPmodel`**: assembles the MIP in CSR (`kHighsMatrixFormatRowwise`) + `integrality[]` (0=cont, 1=integer; binary = integer with bounds [0,1]) → one `Highs_passMip` → `Highs_run` → status switch → `Highs_getSolution` (primal) + `Highs_getObjectiveValue`. The SCIP event handler (progress / time-limit extension via `CRPextratime`) was **dropped** — no C-API equivalent; `CRPnodes` read best-effort from the `mip_nodes` info key (0 if unavailable).
+- `S_CRPauditing` calls `S_loadsubproblem` (builds the audit LP via `Highs_passLp`, MAXIMIZE) then `S_solvesubproblem` per unsafe cell.
+- **Verified**: `libCRP.dylib` links `libhighs.1.dylib`; `S_CRP{open,close,loadprob,optimize,printsolution,auditing,free}prob` all export; dlopen smoke + a 2-cell MIP (total-25) solved correctly (a 12→10, b 13→15, obj 4).
+
+## Next Move
+1. **Task 6 — Dockerize / cloud-native packaging.** Write a `Dockerfile` (manylinux base, HiGHS + build deps, superbuild via `native/CMakeLists.txt`) producing a portable image; document the reproducible build. (Task 1's remaining sub-items are all checked off except the Dockerfile itself.)
+2. **Task 2 — pybind11 bindings** replacing SWIG/JNI for the headless path (hitas `FullJJ`, crp `do_round`, csp `CSP*`). pybind11 not yet installed on this machine.
+3. End-to-end verification against `data/` sample `.asc`/`.arb`/`.ttf` files once bindings exist.
 
 ## Notes / decisions
 - "Open source solver" = replace CPLEX/XPRESS usage with HiGHS (csp) + SCIP (crp). Both already installed on this machine; csp/crp CMake already support them.
