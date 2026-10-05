@@ -1,0 +1,15 @@
+[submodule "native/csp"]
+	path = native/csp
+	url = https://github.com/trygu/CSP.git
+[submodule "native/crp"]
+	path = native/crp
+	url = https://github.com/trygu/CRP.git
+[submodule "native/hitas"]
+	path = native/hitas
+	url = https://github.com/trygu/tauhitas.git
+[submodule "native/rounder"]
+	path = native/rounder
+	url = https://github.com/trygu/taurounder.git
+[submodule "native/core"]
+	path = native/core
+	url = https://github.com/trygu/libtauargus.git
