@@ -48,6 +48,12 @@ from .batch import (
 logger = logging.getLogger(__name__)
 
 
+# WriteCSV/WriteCSVTable index into DimSequence[d] for each table dimension.
+# The native code dereferences it (a null/empty sequence segfaults), so the
+# identity sequence {0..9} (Java SaveTable.MAXDIM) is the correct default.
+IDENTITY_DIM_SEQUENCE = list(range(10))
+
+
 # ===========================================================================
 # Variable dataclass (parsed from .rda)
 # ===========================================================================
@@ -1080,7 +1086,7 @@ class Engine:
         fpath = self._work_dir / cmd.file if cmd.file else self._work_dir / f"table_{tab + 1}.tab"
 
         if cmd.output_type == 1:  # CSV
-            self._tau.write_csv(tab, str(fpath), True, [], 1)
+            self._tau.write_csv(tab, str(fpath), True, IDENTITY_DIM_SEQUENCE, 1)
         elif cmd.output_type in (2, 3, 4, 5, 6, 7):
             # CellRecords (SBS, code value, etc.)
             self._tau.write_cell_records(tab, str(fpath), True, False,
