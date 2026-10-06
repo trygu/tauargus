@@ -7,4 +7,13 @@
 /*.ilm
 /*.xpr
 /*.il*
+*.log
+*.dat
+*.lp
+*.bra
+*.heu
+*.sta
+CSPlogfile.txt
+python/build/
+python/dist/
 native/build/
