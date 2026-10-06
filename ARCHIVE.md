@@ -1,0 +1,106 @@
+# Tau-Argus Rewrite — Archive
+
+Historical/completed state, extracted from `PROGRESS.md` on 2026-10-06
+(repo meta-cleanup). See `PROGRESS.md` for current state.
+
+Branch: `rewrite`
+
+## Original goals
+1. Port to the open source solver and make it cloud native and portable
+2. Clean up the code
+3. Port the Swing/Java UI to Python with a CLI-based UI
+4. Remove all traces of Java
+
+## Architecture (as-is, at analysis time)
+- **Native C++ engine** in 5 git submodules under `native/`:
+  - `native/core` — data model, Argus/JJ file I/O, table compute engine (`TauArgus` class). Static lib `tauargus_core`.
+  - `native/csp` — cell suppression (branch-and-price LP), LP backend **HiGHS** (`src/Jjsolver.c`). Shared lib `tauargus_csp`.
+  - `native/crp` — controlled rounding (CP/S/XP/XM main programs).
+  - `native/hitas` — hierarchical/iterative suppression (`AHiTaS` + `FullJJ`). Links `tauargus_csp`.
+  - `native/rounder` — rounder driver (calls CRP `DoRound`).
+- **Java frontend** in `src/tauargus/` (90 files, ~38k LOC): `model/` (batch.java 1358 lines, OptiSuppress 1776 lines, Application, Metadata, SaveTable), `gui/` (Swing), `service/TableService.java` (integration seam via SWIG/JNI), `extern/dataengine/` (SWIG-generated).
+- Solver selection (Java `Application.java`): SOLVER_XPRESS=1, CPLEX=2, SOPLEX=3 ("SCIP"); batch `<SOLVER>` tag picks it.
+- SWIG interface `native/core/src/TauArgusJava.swg` — replaced by pybind11.
+- Core public API: `native/core/src/TauArgus.h` — ~172 methods.
+
+## Environment (macOS/Apple Silicon)
+cmake 4.4.2, AppleClang 21, python3 3.14.7 (/opt/homebrew), HiGHS 1.15.1 via brew.
+
+## Verified builds (all done)
+- [x] `native/core` → `libtauargus_core.a` on macOS (warnings only).
+- [x] `native/csp` → `libtauargus_csp.dylib` with HiGHS. Exports `SCIPv::CSP*` + globals.
+- [x] `native/hitas` → `libtauargus_hitas.dylib`, links csp + HiGHS.
+- [x] `native/crp` → HiGHS MIP backend (rewritten from SCIP). `libCRP.dylib` links `libhighs.1.dylib`; numeric MIP test passes.
+- [x] `native/rounder` → `libtauargus_rounder.dylib`, links CRP. Removed stale duplicated `src/WrapCRP.h`.
+- [x] Top-level `native/CMakeLists.txt` superbuild — all 5 modules, libs in `native/build/lib/`.
+
+## hitas porting notes (done)
+- Removed `cplex.h`/`xprs.h`/SCIP includes from `HiTaSCtrl.cpp`; `CloseSolver` no-op; `CheckStart` logs "using HiGHS".
+- `WrapCSP.{h,cpp}`: single `SCIPv::` CSP API only.
+- `HITAS_EXPORT` macro replaces `__declspec(dllexport)`.
+- macOS fixes: removed `<malloc.h>`, `<vector.h>`→`<vector>`, added `<cassert>`.
+- SWIG wrapper `HiTaSCtrl_wrap.*` excluded.
+
+## crp porting notes (done, HiGHS-backed)
+- HiGHS C API header: `<highs/interfaces/highs_c_api.h>` (NOT `highs/highs_c_api.h`).
+- `crpSmain.c` (MIP): `Highs_passMip` (CSR + integrality) → `Highs_run` → `Highs_getModelStatus` → `Highs_getSolution`.
+- `crpSaudit.c` (audit LP): `Highs_passLp` + `Highs_changeColCost`/`Highs_changeColBounds` per iteration; `col_dual` gives reduced costs directly.
+- Both files compiled as **C++** (C++ internal linkage for header `const`s; K&R defs converted to ANSI).
+- `Highs_clear()` resets ALL options — re-apply `output_flag=0` + `log_to_console=0` after every clear.
+- No `Highs_inf` in C API; `#define CRP_HIGHS_INF 1.0e20`.
+- CMake: `find_package(Highs REQUIRED)` + `highs::highs`; kept `SCIPV` define for churn minimization.
+- Verified: all `S_CRP*` entry points export; 2-cell MIP (total-25) solved correctly.
+
+## Python port — completed state
+Headless Python CLI path is **end-to-end functional** for the microdata flow.
+`data/TestRecode.arb` runs to completion; **47 tests green**.
+- **pybind11 module** (`python/cpp/bind_{core,hitas,rounder}.cpp`): ~54 `TauArgus` methods + `HiTaSCtrl` + `RounderCtrl`. Wheel via `uv build --wheel` (self-contained, `@loader_path` rpath). Smoke: `TauArgus().version()` → `1.1.4.11`.
+- **`batch.py`** — legacy-compatible `.arb` parser (18 command dataclasses, tokenizer, status machine).
+- **`engine.py`** — `parse_rda`/`parse_rda_table` mirror `Metadata.read*Metadata`; `Engine.run_batch` drives the native engine end-to-end (clean → set info → vars → explore → tables → compute → recodes).
+- Native-call fidelity fixes: kwargs `is_numeric`/`is_hierarchical`; `set_hierarchical_digits` trims trailing-zero levels; `set_table` `max_scaled_cost >= 1`, shadow var defaults to response var; `set_table_safety` holding thresholds match `TableSet.readSafetyRule`; Recode: 3 paths (digit truncation, `<TREERECODE>` file via `get_var_code` lookup, classic `DoRecode`).
+
+## Key files (reference)
+- `native/core/src/TauArgus.h` — full API surface (~172 methods)
+- `src/tauargus/service/TableService.java` — how native is driven
+- `src/tauargus/model/batch.java` — .arb grammar
+- `src/tauargus/model/OptiSuppress.java` — suppression/rounding orchestration
+- `src/tauargus/model/Application.java` — solver constants, Windows registry (to replace)
+- `native/csp/src/Jjsolver.c` — HiGHS LP shim
+- `native/crp/src/crpSmain.c` / `crpSaudit.c` — HiGHS MIP/LP
+
+## Notes / decisions
+- "Open source solver" = HiGHS for csp (LP) and crp (MIP); SCIP dropped.
+- Windows registry (WinRegistry.java, SystemUtils.getReg*) → config file / env vars.
+- Temp dir conventions → `tempfile` module + explicit work-dir option in CLI.
+- Progress listeners → Python callbacks / logging.
+- Do NOT port Swing dialogs one-by-one; CLI + headless batch is the product.
+
+## Completed task sub-items (Tasks 1, 2 partial)
+Task 1 (open source solver + portable): core/csp/hitas/crp/rounder build-verified with HiGHS; rounder CMakeLists; superbuild.
+Task 2 (pybind11): module built & linked; ~54 methods bound; verified with smoke tests.
+Task 3 (model/service layer): batch.py, engine.py (metadata parse + orchestration) done; suppress.py/apriori/recode/save pending.
+
+## Suppress/round smoke tests (done 2026-10-06)
+`python/tests/test_suppress.py` rewritten to assert the engine's *observable*
+invariants (the old assertions were wrong):
+- MOD (AHiTaS) / OPT (FullJJ) leave the target unsafe cell's status (3)
+  unchanged but mark neighbouring safe cells secondary (status 11/12) →
+  assert "secondary count increases".
+- RND (CRP/HiGHS) stores values via `SetRoundedResponse`; `get_table_cell_value`
+  returns the original response (not the rounded one), so a "multiple of base"
+  check on that getter is invalid. Assert: do_round succeeds, values stay
+  non-negative, and a base below `_min_round_base` raises BatchError.
+- Per-cell LPL/UPL (`GetTableCellProtectionLevels`) return sentinel values
+  (e.g. 0.01) for safe cells → not usable as a range check.
+- Each test uses a fresh `Engine` (function-scoped fixture in the test file):
+  running a second suppression on an already-modified table crashes the native
+  engine.
+
+## OPEN BUG (native/csp, HiGHS teardown segfault)
+Non-deterministic (~40%) segfault in `Highs_destroy` (HiGHS `HighsOptions`
+destructor) reached from `JJfreeprob` → `unload_lp` during/after `AHiTaS` in
+`native/csp` (Cspmain.c `PPCSPoptimize`, `cspsolve.c` global `JJLPptr lp`).
+Symptom: full `uv run pytest` intermittently dies RC 133/139 after a suppress
+test; single suppress tests pass in isolation. Needs a native `native/csp`
+fix (LP lifecycle: `load_lp` in read_prob / `unload_lp` paths) — see PROGRESS.md
+"Current". Not a Python/test issue.

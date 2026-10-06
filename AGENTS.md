@@ -1,40 +1,37 @@
-# Tau-Argus Rewrite — Agent Instructions
+# Tau-Argus Rewrite — Agent Rules
 
-You are helping port **Tau-Argus** (a Statistical Disclosure Control tool) to
-open-source solvers, a cloud-native portable build, and a Python CLI that
-replaces the Swing/Java frontend.
+Port the SDC tool to open-source solvers (HiGHS), a portable cloud-native build,
+and a headless Python CLI (replacing the Java/Swing frontend).
 
-## Read this first, every session
-- **`PROGRESS.md`** is the single source of truth: goals, architecture map,
-  verified builds, the current task, blockers, and the "Next Move" section.
-  Read it top-to-bottom before doing anything.
-- When you make meaningful progress (a build verified, a blocker cleared, a
-  decision made), **update `PROGRESS.md`** so a fresh session can resume. Keep
-  the "Verified builds" checkboxes and "Next Move" current.
+## Read first
+- `PROGRESS.md` is the single source of truth. Read it, and update it on every
+  verified checkpoint (build, test, decision, cleared blocker).
 
-## Repository layout
-- `native/` — the real SDC engine, 5 **git submodules** (C/C++):
-  `core` (static), `csp` (HiGHS-backed LP), `hitas` (links csp),
-  `crp` (controlled rounding, HiGHS-backed), `rounder` (links crp).
-  Build work happens *inside* each submodule — commit there, then bump the
-  submodule pointer in the parent.
-- `src/tauargus/` — the legacy Java/Swing frontend (to be deleted, Task 8).
-- `data/` — sample `.asc` / `.arb` / `.ttf` files for end-to-end verification.
+## Architecture
+- Native C++ engine: 5 git submodules under `native/` — `core` (static),
+  `csp` (HiGHS LP), `hitas` (links csp), `crp` (HiGHS MIP), `rounder` (links crp).
+  Build/commit **inside** each submodule, then bump its pointer in the parent.
+- `python/` — pybind11 bindings + `tauargus` package (batch parser, engine,
+  CLI). This is the product: headless `.arb` batch path, not GUI.
+- `src/tauargus/` — legacy Java frontend (to be deleted, Task 8).
+- `data/` — sample `.asc`/`.rda`/`.arb` files for end-to-end verification.
+- All solver backends converge on **HiGHS** (no CPLEX/XPRESS/old-SCIP).
+  HiGHS C API header is `<highs/interfaces/highs_c_api.h>`.
 
-## Build commands (macOS/Apple Silicon, this machine)
-- HiGHS + SCIP via brew: `-DHighs_DIR=$(brew --prefix)/lib/cmake/Highs`
-- A module builds with:
-  `cmake -S native/<mod> -B native/<mod>/build -DHighs_DIR=$(brew --prefix)/lib/cmake/Highs && cmake --build native/<mod>/build`
-- Header: HiGHS C API is `<highs/interfaces/highs_c_api.h>` (NOT `highs/highs_c_api.h`).
+## Build (macOS/Apple Silicon)
+- HiGHS via brew: `-DHighs_DIR=$(brew --prefix)/lib/cmake/Highs`
+- One module: `cmake -S native/<mod> -B native/<mod>/build -DHighs_DIR=$(brew --prefix)/lib/cmake/Highs && cmake --build native/<mod>/build`
+- Superbuild (all 5): `cmake -S native -B native/build -DHighs_DIR=$(brew --prefix)/lib/cmake/Highs && cmake --build native/build`
 
-## Working agreement
-- The product is the **headless Python CLI + batch (`.arb`) path**, not GUI.
-- All solver backends converge on **HiGHS** (drop CPLEX/XPRESS/old-SCIP).
+## Verify / test
+- Python tests (47): `cd python && uv run pytest`
+- Wheel: `cd python && uv build --wheel`
+- Smoke: import built module, `TauArgus().version()` → `1.1.4.11`
+
+## Rules
 - Prefer editing existing files; follow each file's conventions.
-- **Commit early and often.** Commit at every verified checkpoint — a build
-  verified, a port completed, a test passing, a blocker cleared — not in one
-  big batch at the end. Commit **submodules first**, then the parent
-  (submodule pointer + `PROGRESS.md` + any new top-level files).
-- **Keep build artefacts out of git.** Python build outputs (`.venv/`,
-  `build/`, `dist/`, `*.so`, `*.dylib`) and `native/build/` are gitignored —
-  never stage them.
+- Commit early and often at every verified checkpoint: submodules first,
+  then parent (pointer + `PROGRESS.md`).
+- Keep build artefacts out of git: `.venv/`, `build/`, `dist/`, `*.so`,
+  `*.dylib`, `native/build/` are gitignored — never stage them.
+- No Windows registry access; use config file / env vars / tempfile.
