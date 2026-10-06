@@ -29,9 +29,9 @@ void init_hitas(py::module_ &m) {
             return h.FullJJ(in.c_str(), out.c_str(), max_time, ilm.c_str(),
                             out_dir.c_str(), solver.c_str());
         }, py::arg("in_file_jj"), py::arg("out_file"), py::arg("max_time") = 0,
-           py::arg("ilm_file") = "", py::arg("out_dir") = "",
-           py::arg("solver") = "HiGHS",
-           "Optimal cell suppression (FullJJ). Returns a status code.")
+            py::arg("ilm_file") = "", py::arg("out_dir") = "",
+            py::arg("solver") = "SCIP",
+            "Optimal cell suppression (FullJJ). Returns a status code.")
         .def("a_hitas", [](HiTaSCtrl &h, const std::string &pars, const std::string &files,
                             long max_time, const std::string &ilm,
                             const std::string &tau_out, const std::string &solver,
@@ -41,8 +41,8 @@ void init_hitas(py::module_ &m) {
                             tau_out.c_str(), solver.c_str(), single_with_single,
                             single_with_more, do_count_bounds);
         }, py::arg("pars_file"), py::arg("files_file"), py::arg("max_time") = 0,
-           py::arg("ilm_file") = "", py::arg("tau_out_dir") = "",
-           py::arg("solver") = "HiGHS", py::arg("single_with_single") = false,
+            py::arg("ilm_file") = "", py::arg("tau_out_dir") = "",
+            py::arg("solver") = "SCIP", py::arg("single_with_single") = false,
            py::arg("single_with_more") = false, py::arg("do_count_bounds") = false,
            "Modular (hierarchical iterative) cell suppression. Returns a status code.");
 }

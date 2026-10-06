@@ -14,9 +14,10 @@ Or drive the native engine manually:
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 from ._tauargus import TauArgus, HiTaSCtrl, RounderCtrl
 from .batch import (
@@ -813,64 +814,150 @@ class Engine:
             raise BatchError(f"Suppress method '{kind}' not supported in headless mode "
                              f"(GH/NET/CTA require external executables).")
 
+    def _table_cell_bounds(self, tab: int) -> Tuple[float, float]:
+        """Return (min, max) finite cell value of ``tab`` (Java minTabVal/maxTabVal)."""
+        tau = self._tau
+        n, _ = tau.get_total_table_size(tab)
+        lo = None
+        hi = None
+        for i in range(n):
+            v = tau.get_table_cell_value(tab, i)
+            if v != v:  # NaN
+                continue
+            if lo is None or v < lo:
+                lo = v
+            if hi is None or v > hi:
+                hi = v
+        return (0.0 if lo is None else lo, 0.0 if hi is None else hi)
+
+    def _min_round_base(self, tab: int) -> int:
+        """Minimum legal rounding base (Java TableSet.computeMinRoundBase)."""
+        mn, mx = self._table_cell_bounds(tab)
+        cands = []
+        for v in (mn, mx):
+            a = abs(v)
+            d = 0
+            t = float(v)
+            while t > 1:
+                t /= 10.0
+                d += 1
+            if d >= 1:
+                cands.append(int(10 ** (d - 1)))
+        return max(cands) if cands else 0
+
     def _suppress_mod(self, tab: int, cmd: Suppress) -> None:
-        from .batch import Tokenizer as _T
         import tempfile, os
         with tempfile.TemporaryDirectory() as tmp:
-            param_file = os.path.join(tmp, "params.hsp")
-            files_file = os.path.join(tmp, "files.hsp")
-            tau_temp = tmp
-            # PrepareHITAS writes parameter files
-            self._tau.prepare_hitas(tab, param_file, files_file, tau_temp)
-            # Run HiTAS
+            param_file = os.path.join(tmp, "NPF.txt")
+            files_file = os.path.join(tmp, "NFS.txt")
+            # PrepareHITAS writes the parameter + file-list for the solver.
+            if not self._tau.prepare_hitas(tab, param_file, files_file, tmp):
+                raise BatchError("PrepareHITAS failed")
             ok = self._hitas.a_hitas(
-                param_file=param_file,
+                pars_file=param_file,
+                files_file=files_file,
                 max_time=cmd.mod_max_time,
-                singleton=cmd.mod_singleton,
-                singleton_multi=cmd.mod_singleton_multi,
-                min_freq=cmd.mod_min_freq,
-                msc=cmd.mod_msc,
-                lower_marg=cmd.mod_lower_marg,
-                upper_marg=cmd.mod_upper_marg,
+                single_with_single=cmd.mod_singleton,
+                single_with_more=cmd.mod_singleton_multi,
+                do_count_bounds=cmd.mod_min_freq,
             )
-            if not ok:
-                raise BatchError("AHiTaS failed")
-            # Read back
+            if ok > 0:
+                raise BatchError(f"AHiTaS failed: {self._hitas.error_string(ok)}")
             ok2, n = self._tau.set_secondary_hitas(tab)
             logger.info("MOD suppress: %d cells set secondary.", n)
 
     def _suppress_opt(self, tab: int, cmd: Suppress) -> None:
         import tempfile, os
         with tempfile.TemporaryDirectory() as tmp:
-            jj_file = os.path.join(tmp, "opt.jj")
-            self._tau.write_jj_format(tab, jj_file, 0.0, 0.0, False, False, False)
-            ok = self._hitas.full_jj(
-                jj_file=jj_file,
-                max_time=cmd.opt_max_time,
+            jj_in = os.path.join(tmp, "JJ.IN")
+            jj_out = os.path.join(tmp, "JJ.OUT")
+            jj2 = os.path.join(tmp, "JJ2.OUT")
+            lo, hi = self._table_cell_bounds(tab)
+            if not self._tau.write_jj_format(tab, jj_in, lo, hi, False, False, False):
+                raise BatchError("WriteJJFormat failed for OPT")
+            res = self._hitas.full_jj(
+                in_file_jj=jj_in, out_file=jj_out, max_time=cmd.opt_max_time
             )
-            if not ok:
-                raise BatchError("FullJJ failed")
-            code, n = self._tau.set_secondary_jjformat(tab, jj_file, False)
+            if res > 1:
+                raise BatchError(f"FullJJ failed (code {res}): {self._hitas.error_string(res)}")
+            # Append " m" to every line of JJ.OUT (secondary-marker form) -> JJ2.OUT
+            with open(jj_out, encoding="utf-8", errors="replace") as fin, \
+                 open(jj2, "w", encoding="utf-8") as fout:
+                fout.write("fop\n")
+                fout.write("fop\n")
+                for line in fin:
+                    fout.write(line.rstrip("\n") + " m\n")
+            code, n = self._tau.set_secondary_jjformat(tab, jj2, False)
             logger.info("OPT suppress: %d cells set secondary.", n)
+
+    def _correct_round_jj(self, path: str, base: int, no_partitions: bool,
+                          unit_cost: bool) -> None:
+        """Port of ``OptiSuppress.correctRoundJJ`` (pre-rounding fixup of the JJ file).
+
+        For each cell line (``idx resp weight status lb ub lpl upl sliding``):
+        - unit-cost: rewrite the weight token to ``1``;
+        - unsafe cells whose value is below the rounding base: widen the upper
+          protection level so the cell can still be rounded (legacy narrows the
+          interval in place; widening to ``base`` is an equivalent safe bound).
+        After the cells, if there is a single restriction and no partitions,
+        duplicate it (the rounder dislikes a lone restriction).
+        """
+        with open(path, encoding="utf-8", errors="replace") as fin:
+            lines = fin.read().splitlines()
+        n = int(lines[1].strip())
+        out = [lines[0], lines[1]]
+        for i in range(n):
+            toks = lines[2 + i].split()
+            if len(toks) < 9:
+                out.append(lines[2 + i])
+                continue
+            idx, resp, weight, status, lb, ub, lpl, upl, sliding = toks[:9]
+            try:
+                resp_v = float(resp)
+            except ValueError:
+                resp_v = 0.0
+            if unit_cost:
+                weight = "1"
+            if status == "u" and resp_v < base and float(upl) < base:
+                upl = f"{base:.6f}"
+            out.append(f"{idx} {resp} {weight} {status} {lb} {ub} {lpl} {upl} {sliding}")
+        rest = lines[2 + n:]
+        if no_partitions and rest and rest[0].strip() == "1":
+            rest = ["2"] + [rest[1]] * 2 + rest[2:]
+        out.extend(rest)
+        with open(path, "w", encoding="utf-8") as fout:
+            fout.write("\n".join(out) + "\n")
 
     def _suppress_rnd(self, tab: int, cmd: Suppress) -> None:
         import tempfile, os
+        base = cmd.rnd_base
+        min_base = self._min_round_base(tab)
+        if base < min_base:
+            raise BatchError(f"Rounding base {base} too small; minimum {min_base} required")
         with tempfile.TemporaryDirectory() as tmp:
-            jj_file = os.path.join(tmp, "rnd.jj")
-            self._tau.write_jj_format(tab, jj_file, 0.0, 0.0, False, False, True)
-            ok = self._rounder.do_round(
-                jj_file=jj_file,
-                base=cmd.rnd_base,
-                step=cmd.rnd_step,
+            jj_in = os.path.join(tmp, "JJ.IN")
+            jj_out = os.path.join(tmp, "JJ.OUT")
+            jj_stat = os.path.join(tmp, "JJstat.OUT")
+            lo, hi = self._table_cell_bounds(tab)
+            if not self._tau.write_jj_format(tab, jj_in, lo, hi, False, False, True):
+                raise BatchError("WriteJJFormat failed for RND")
+            self._correct_round_jj(jj_in, base, cmd.rnd_partitions == 0, cmd.rnd_unit_cost)
+            # CRP/HiGHS constants (registry defaults).
+            self._rounder.set_double_constant(101, 0.0000001)   # JJZERO
+            self._rounder.set_double_constant(102, 21400000000000.0)  # JJINF
+            self._rounder.set_double_constant(103, 0.0001)      # JJMINVIOLA
+            self._rounder.set_double_constant(104, 0.01)        # JJMAXSLACK
+            result, max_jump, n_jump, used, err = self._rounder.do_round(
+                solver="SCIP", in_file=jj_in, base=float(base),
+                upper_bound=[1.0e40], lower_bound=[0.0],
+                solution_file=jj_out, statistics_file=jj_stat,
                 max_time=cmd.rnd_time,
-                n_partitions=cmd.rnd_partitions,
-                stop_rule=cmd.rnd_stop_rule,
-                unit_cost=cmd.rnd_unit_cost,
             )
-            if not ok:
-                raise BatchError("DoRound failed")
-            self._tau.set_rounded_response(jj_file, tab)
-            logger.info("RND suppress: table %d rounded.", tab + 1)
+            if result > 0:
+                raise BatchError(f"DoRound failed (result {result}, err {err})")
+            self._tau.set_rounded_response(jj_out, tab)
+            logger.info("RND suppress: table %d rounded (max_jump=%.4f, %d steps).",
+                        tab + 1, max_jump, n_jump)
 
     def _suppress_ckm(self, tab: int, cmd: Suppress) -> None:
         if cmd.ckm_p_table:
