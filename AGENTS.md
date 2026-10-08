@@ -2,13 +2,23 @@
 
 Port SDC tool to HiGHS solver, portable cloud-native build, and headless Python CLI (replacing Java/Swing).
 
-## Context & Execution Constraints (Strict)
-- Read `PROGRESS.md` first. It is the single source of truth for current state and next steps.
-- **Single-task limit:** Work ONLY on the active task in `PROGRESS.md`. Complete it, verify it, update `PROGRESS.md`, and stop.
-- **No speculative reads:** Never dump entire C/C++ files into context. Read targeted line ranges (max 80 lines per tool call).
-- **Diagnostics first:** When debugging crashes/memory issues, run tests under AddressSanitizer (`-fsanitize=address`) and inspect the ASan stack trace before touching code. Do NOT guess root causes.
+## 1. Context & Token Preservation (CRITICAL)
+- **Terminal output discipline:** NEVER run tests or build commands that print unbounded raw logs into chat context.
+  - Redirect verbose output: `<cmd> > /tmp/run.log 2>&1`
+  - Inspect ONLY relevant lines: `tail -n 25 /tmp/run.log` or `grep -E "ERROR|CRASH|===|FAIL" /tmp/run.log`
+  - Never run shell loops (e.g. `seq 1 25`) directly echoing stdout into context. Summarize results in a single log file.
+- **Line reading limits:** Read maximum 60 lines per tool call (`limit=60`). Never read entire files.
+- **No speculative code edits:** When debugging crashes, do not add arbitrary debug prints across multiple files. Run under ASan, get the exact stack trace, fix the flagged site, and verify.
 
-## Architecture
+## 2. Checkpoint & Progress Discipline
+- **Micro-checkpoints:** You MUST update `PROGRESS.md` at every significant discovery or phase transition, NOT just when a task is 100% finished:
+  1. When a hypothesis is confirmed or invalidated (e.g. "Invalidated: matsz buffer overflow").
+  2. When an ASan stack trace is captured and root cause is identified.
+  3. When a submodule build succeeds under new flags.
+  4. When an in-flight task is verified.
+- **State format:** Keep `PROGRESS.md` strictly under 35 lines. Completed items are moved to `ARCHIVE.md` immediately.
+
+## 3. Architecture & Boundaries
 - Native C/C++ engine: 5 git submodules under `native/`:
   `core` (static), `csp` (HiGHS LP), `hitas` (links csp), `crp` (HiGHS MIP), `rounder` (links crp).
   Build/commit INSIDE each submodule first, then bump pointers in the parent repo.
@@ -16,25 +26,19 @@ Port SDC tool to HiGHS solver, portable cloud-native build, and headless Python 
 - Python layer: `python/` (pybind11 bindings + `tauargus` package). Target product is headless `.arb` batch CLI.
 - Legacy to ignore: `src/tauargus/` (Java frontend to be deleted in Task 8). Do NOT inspect or edit.
 
-## Build Commands (macOS / Apple Silicon)
+## 4. Build Commands (macOS / Apple Silicon)
 - Highs Brew prefix: `-DHighs_DIR=$(brew --prefix)/lib/cmake/Highs`
 - Submodule build:
   `cmake -S native/<mod> -B native/<mod>/build -DHighs_DIR=$(brew --prefix)/lib/cmake/Highs && cmake --build native/<mod>/build`
 - Superbuild (all 5):
   `cmake -S native -B native/build -DHighs_DIR=$(brew --prefix)/lib/cmake/Highs && cmake --build native/build`
-- ASan build (native debugging) — use a SEPARATE dir so it doesn't clobber the
-  release `native/build`:
+- ASan build (native debugging) — use separate dir to preserve release build:
   `cmake -S native -B native/build-asan -DHighs_DIR=$(brew --prefix)/lib/cmake/Highs -DCMAKE_C_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g" -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g" && cmake --build native/build-asan`
-  (For faults inside HiGHS, also build HiGHS itself with ASan — full recipe in
-  `docs/native-debugging.md`.)
+  (Preload runtime for Python: `DYLD_INSERT_LIBRARIES="$(clang -print-file-name=libclang_rt.asan_osx_dynamic.dylib)" uv run ...`)
 
-## Verification
-- Python test suite: `cd python && uv run pytest`
-- Wheel package: `cd python && uv build --wheel`
-- Smoke test: Import built module, `TauArgus().version()` → `1.1.4.11`
-
-## Commit & Hygiene Rules
-- Surgical edits: Use targeted search/replace or patches. Avoid re-writing full files.
+## 5. Verification & Commits
+- Verification: `cd python && uv run pytest` | `uv build --wheel`
+- Surgical edits: Use targeted search/replace or patches. Avoid full-file rewrites.
 - Commit cadence: Submodule commit first -> parent submodule bump + `PROGRESS.md` update.
 - Never stage build artifacts (`.venv/`, `build/`, `dist/`, `*.so`, `*.dylib`, `native/build/`).
 - No Windows registry APIs: Use environment variables, config files, or `tempfile`.
