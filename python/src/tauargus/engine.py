@@ -55,6 +55,27 @@ IDENTITY_DIM_SEQUENCE = list(range(10))
 
 
 # ===========================================================================
+# Tabular (pre-aggregated) table-input constants
+# ===========================================================================
+# Cell status values — must match Java CellStatus / native CS_* (defines.h).
+CS_UNKNOWN = 0
+CS_SAFE = 1
+CS_SAFE_MANUAL = 2
+CS_UNSAFE_MANUAL = 9
+CS_PROTECT_MANUAL = 10
+CS_SECONDARY_UNSAFE = 11
+CS_EMPTY = 14
+
+# Sentinel for an "unparsed" numeric field (Java Cell.UNKNOWN).
+_CELL_UNKNOWN = -999999999
+
+# Native error codes returned by SetInCodeList/SetInTable (see defines.h).
+_ERR_CODENOTINCODELIST = 1017
+_ERR_CELLALREADYFILLED = 1022
+_ERR_CODEDOESNOTEXIST = 1027
+
+
+# ===========================================================================
 # Variable dataclass (parsed from .rda)
 # ===========================================================================
 @dataclass
@@ -143,6 +164,25 @@ class Variable:
 
     def get_total_code(self) -> str:
         return self.tot_code if self.tot_code else "Total"
+
+    def is_total_code(self, code: str) -> bool:
+        """Case-insensitive total-code test (Java ``isTotalCode``)."""
+        return code.lower() == (self.tot_code or "").lower()
+
+    def is_missing(self, code: str) -> bool:
+        for m in self.missing:
+            if m and code == m:
+                return True
+        return False
+
+    def normalise_code(self, code: str) -> str:
+        """Pad a non-hierarchical code to ``var_len`` (Java ``normaliseCode``)."""
+        if code and self.hierarchical == 0:
+            return self.pad_code(code)
+        return code
+
+    def pad_code(self, code: str) -> str:
+        return code.rjust(self.var_len) if self.var_len else code
 
 
 @dataclass
@@ -591,6 +631,7 @@ class Engine:
         self._rounder = RounderCtrl()
         self._metadata: Optional[Metadata] = None
         self._data_file: str = ""
+        self._is_table: bool = False
         self._tables: List[tuple] = []  # (SpecifyTable, SafetyRuleSet)
         self._safety_rules_buf: List[List[SafetyRule]] = []
         self._n_tables: int = 0
@@ -778,29 +819,422 @@ class Engine:
 
     # -- table-input (tabular data) flow ------------------------------------
     def open_table_data(self, data_file: str, meta: Metadata) -> None:
+        """Register a tabular (pre-aggregated) data file + its metadata.
+
+        Like the Java flow, the native engine is only initialised at
+        ``<READTABLE>`` time (see :meth:`read_table`); this just records state.
+        """
         self._data_file = data_file
         self._metadata = meta
         meta.data_file = data_file
-        self._tables = []
+        self._is_table = True
+
+    def _init_table_engine(self, meta: Metadata) -> None:
+        """Native setup for the tabular flow (port of ``TableService.readTables``).
+
+        ``CleanAll`` → ``SetInFileInfo(False, sep)`` → ``SetNumberVar`` →
+        variable lengths from the data file → ``SetVariable`` → ``ThroughTable``
+        → ``SetNumberTab``.
+        """
         self._tau.clean_all()
         self._tau.set_in_file_info(False, meta.field_separator)
         self._tau.set_number_var(len(meta.variables))
+
+        self._compute_var_lengths(meta)
+
         for var in meta.variables:
-            var.index = 0
             self._set_variable(var)
 
+        # Mark that tables are given directly rather than computed from micro
+        # data (Java: ThroughTable → m_UsingMicroData = false).
+        self._tau.through_table()
+        self._tau.set_number_tab(len(self._tables))
+
     def read_table(self, additivity: int = 0, keep_status: bool = False) -> None:
-        """Read tabular data (after SetInTable calls)."""
-        self._finalize_tables()
-        # CompletedTable is called per-table in the tabular flow;
-        # for the batch path the Java code calls it after all cells are set.
-        for i in range(self._n_tables):
+        """Read a tabular table: port of ``TableSet.read`` (3-phase flow).
+
+        Phase 1: scan the ``.tab`` rows, register categorical codes via
+        ``SetInCodeList`` (skipping total/missing rows).
+        Then ``SetTotalsInCodeList`` → ``SetTable`` → ``SetTableSafetyInfo``.
+        Phase 3: scan again, ``buildCell`` + ``SetInTable`` per row.
+        Finally ``CompletedTable`` (optionally computing marginals and
+        restoring manually-set statuses when ``keep_status`` is true).
+        """
+        meta = self._metadata
+        if meta is None:
+            raise BatchError("No metadata.")
+        if not self._is_table:
+            raise BatchError("read_table requires open_table_data first.")
+        self._init_table_engine(meta)
+        sep = meta.field_separator
+        path = Path(self._data_file)
+        if not path.is_file():
+            raise BatchError(f"Table data file not found: {self._data_file}")
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+
+        for i, (spec, srs) in enumerate(self._tables):
+            exp_idx = [meta.index_of(n) for n in spec.exp_vars]
+            if any(j < 0 for j in exp_idx):
+                raise BatchError(f"Table {i + 1}: explanatory variable not in metadata.")
+
+            # -- Phase 1: register categorical codes -------------------------
+            for line in lines:
+                if not line.strip():
+                    continue
+                fields = self._split_fields(line, sep)
+                iexp = 0
+                codes: List[str] = []
+                skip = False
+                for j, var in enumerate(meta.variables):
+                    value = fields[j] if j < len(fields) else ""
+                    if var.type == "CATEGORICAL":
+                        if var.is_total_code(value):
+                            skip = True  # total rows are not codes
+                            break
+                        codes.append(var.normalise_code(value))
+                        if var.is_missing(value):
+                            skip = True  # missing rows are not codes (Java isMissing)
+                            break
+                        iexp += 1
+                if skip:
+                    continue
+                if len(codes) != len(exp_idx):
+                    continue
+                self._set_in_code_list(exp_idx, codes)
+
+            ok, err, _ev = self._tau.set_totals_in_code_list(exp_idx)
+            if not ok:
+                raise BatchError(
+                    f"SetTotalsInCodeList failed for table {i + 1}: "
+                    f"{self._tau.error_string(err)}"
+                )
+
+            # -- table + safety ---------------------------------------------
+            self._call_set_table(i, spec)
+            self._call_set_table_safety_info(i, srs)
+
+            # -- Phase 3: fill the cells -------------------------------------
+            has_top = meta.contains("TOP_N")
+            manual_marge = srs.manual_perc
+            for line in lines:
+                if not line.strip():
+                    continue
+                fields = self._split_fields(line, sep)
+                cell = self._build_cell(fields, meta, has_top, manual_marge)
+                if cell is None:
+                    continue
+                self._set_in_table(i, cell)
+
+            # -- complete the table ------------------------------------------
+            compute_totals = additivity == 1
+            set_totals_safe = not (srs.freq_marge or srs.dom_rule or srs.pq_rule)
+            status_backup = self._backup_cell_statuses(i) if (compute_totals and keep_status) else None
             ok, err = self._tau.completed_table(
-                index=i, file="", compute_totals=(additivity != 0),
-                calculated_totals_as_safe=False, for_cover_table=False,
+                index=i, file="", compute_totals=compute_totals,
+                calculated_totals_as_safe=set_totals_safe, for_cover_table=False,
             )
             if not ok:
-                raise BatchError(f"CompletedTable failed for table {i + 1}: {self._tau.error_string(err)}")
+                raise BatchError(
+                    f"CompletedTable failed for table {i + 1}: {self._tau.error_string(err)}"
+                )
+            if status_backup is not None:
+                self._restore_cell_statuses(i, status_backup)
+
+            self._n_tables = len(self._tables)
+
+    # -- tabular flow helpers ------------------------------------------------
+    @staticmethod
+    def _split_fields(line: str, sep: str) -> List[str]:
+        """Split a data line, unquoting each field (Java Tokenizer.nextField)."""
+        out: List[str] = []
+        rest = line
+        while True:
+            idx = rest.find(sep)
+            if idx == -1:
+                value = rest.strip()
+                rest = ""
+            else:
+                value = rest[:idx].strip()
+                rest = rest[idx + 1:].strip()
+            if len(value) >= 2 and value.startswith('"') and value.endswith('"'):
+                value = value[1:-1]
+            out.append(value)
+            if rest == "":
+                break
+        return out
+
+    def _compute_var_lengths(self, meta: Metadata) -> None:
+        """Set ``var_len`` from the data file (port of setVariableLengthFromData)."""
+        for var in meta.variables:
+            var.var_len = 0
+        path = Path(self._data_file)
+        if not path.is_file():
+            return
+        sep = meta.field_separator
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            fields = self._split_fields(line, sep)
+            for j, var in enumerate(meta.variables):
+                if j >= len(fields):
+                    break
+                if var.is_categorical and var.hierarchical == 2:
+                    continue  # HIER_FILE: length comes from the hierarchy file
+                if fields[j] == var.tot_code:
+                    continue
+                if len(fields[j]) > var.var_len:
+                    var.var_len = len(fields[j])
+        # HIER_FILE variables take their length from the hierarchy file.
+        for var in meta.variables:
+            if var.is_categorical and var.hierarchical == 2 and var.hier_file_name:
+                try:
+                    hier = self._resolve_path(var.hier_file_name).read_text(
+                        encoding="utf-8", errors="replace")
+                except BatchError:
+                    continue
+                lead = var.leading_string
+                for hline in hier.splitlines():
+                    hline = hline.strip()
+                    while hline.startswith(lead):
+                        hline = hline[len(lead):].lstrip()
+                    if len(hline) > var.var_len:
+                        var.var_len = len(hline)
+
+    def _build_cell(self, fields: List[str], meta: Metadata,
+                    has_top: bool, manual_marge: int):
+        """Port of ``TableSet.buildCell``. Returns a dict or None to skip.
+
+        ``useStatusOnly`` is True for the batch flow when no (non-MAN) safety
+        rule is present, which is exactly when ``m_HasStatus`` is set; the
+        status is therefore always kept (Java keeps it whenever the file has
+        a status column).
+        """
+        response = shadow = cost = lower = upper = _CELL_UNKNOWN
+        freq = _CELL_UNKNOWN
+        status = CS_SAFE  # Java CellStatus.SAFE default
+        max_score: List[float] = []
+        has_status = False
+        codes: List[str] = []
+
+        for j, var in enumerate(meta.variables):
+            value = fields[j] if j < len(fields) else ""
+            t = var.type
+            if t == "CATEGORICAL":
+                # isTotalCode2: trimmed equals totCode OR empty → "" (total)
+                if value.strip() == "" or value.strip() == var.tot_code:
+                    codes.append("")
+                else:
+                    codes.append(var.normalise_code(value))
+            elif t == "RESPONSE":
+                if value in ("", "-"):
+                    status = CS_EMPTY
+                else:
+                    response = self._to_double(value)
+            elif t == "SHADOW":
+                if value not in ("", "-"):
+                    shadow = self._to_double(value)
+            elif t == "COST":
+                if value not in ("", "-"):
+                    cost = self._to_double(value)
+            elif t == "FREQUENCY":
+                if value in ("", "-"):
+                    status = CS_EMPTY
+                else:
+                    freq = int(self._to_double(value))
+            elif t == "TOP_N":
+                if value in ("", "-"):
+                    max_score.append(0.0)
+                else:
+                    max_score.append(self._to_double(value))
+            elif t == "LOWER_PROTECTION_LEVEL":
+                if value not in ("", "-"):
+                    lower = self._to_double(value)
+            elif t == "UPPER_PROTECTION_LEVEL":
+                if value not in ("", "-"):
+                    upper = self._to_double(value)
+            elif t == "STATUS":
+                has_status = True
+                v = value.upper()
+                if v == "":
+                    status = CS_EMPTY
+                elif v == "E":
+                    status = CS_EMPTY
+                elif v == meta.safe_status:
+                    status = CS_SAFE_MANUAL
+                elif v == meta.unsafe_status:
+                    status = CS_UNSAFE_MANUAL
+                elif v == meta.protect_status:
+                    status = CS_PROTECT_MANUAL
+                elif v == "M":
+                    status = CS_SECONDARY_UNSAFE
+                else:
+                    raise BatchError(f"Unknown status({value})")
+
+        # Consistency checks (port of buildCell checks 1–7)
+        if response == _CELL_UNKNOWN and freq == _CELL_UNKNOWN:
+            if status in (CS_SAFE, CS_SAFE_MANUAL):
+                status = CS_EMPTY
+            if status != CS_EMPTY:
+                raise BatchError("An empty cell cannot have a status different from empty")
+        if response == _CELL_UNKNOWN and freq != _CELL_UNKNOWN:
+            raise BatchError("An empty cell cannot have a real frequency")
+        if response not in (_CELL_UNKNOWN, 0) and freq == 0:
+            raise BatchError("A real cell cannot have a frequency zero")
+        if response != _CELL_UNKNOWN and freq == _CELL_UNKNOWN:
+            freq = 1
+        if response == _CELL_UNKNOWN and freq == _CELL_UNKNOWN:
+            status = CS_EMPTY
+        if response == _CELL_UNKNOWN and has_status and status != CS_EMPTY:
+            status = CS_EMPTY
+        if (response not in (_CELL_UNKNOWN, 0) and freq not in (_CELL_UNKNOWN, 0)
+                and status == CS_EMPTY):
+            raise BatchError("A non-empty cell cannot have a status empty")
+
+        # Manual-unsafe protection levels
+        if status == CS_UNSAFE_MANUAL:
+            if lower == _CELL_UNKNOWN:
+                lower = abs(response * manual_marge / 100)
+                if lower > response:
+                    lower = response
+            if upper == _CELL_UNKNOWN:
+                upper = abs(response * manual_marge / 100)
+                if upper > response:
+                    upper = response
+        else:
+            lower = 0
+            upper = 0
+
+        if shadow == _CELL_UNKNOWN:
+            shadow = response
+        if cost == _CELL_UNKNOWN:
+            cost = abs(response)
+        if cost == 0:
+            cost = 0.0001
+        if cost < 0:
+            raise BatchError("Negative cost value found")
+
+        # TopN must not exceed the total (and must be in non-increasing order).
+        if max_score:
+            x = sum(max_score)
+            if x > response + 1e-9:
+                raise BatchError(
+                    f"Sum of topN {x} should not exceed the cell total {response}")
+            if x > response:
+                max_score[0] -= 1e-9
+            for j in range(1, len(max_score)):
+                if max_score[j] > max_score[j - 1]:
+                    raise BatchError(
+                        "Error in the order of the TopN.\n"
+                        f"{j - 1} = {max_score[j - 1]}\n{j} = {max_score[j]}\n"
+                        "This is not allowed.")
+
+        if status == CS_EMPTY or (freq == 0 and response == 0):
+            return None  # empty / all-zero cells are not submitted (Java buildCell)
+
+        return {
+            "codes": codes, "shadow": shadow, "cost": cost, "response": response,
+            "freq": freq, "max_score": max_score, "status": status,
+            "lower": lower, "upper": upper,
+        }
+
+    @staticmethod
+    def _to_double(value: str) -> float:
+        """Java StrUtils.toDouble with comma-decimal support."""
+        v = value.strip().replace(",", ".")
+        try:
+            return float(v)
+        except ValueError:
+            raise BatchError(f'"{value}" is not numeric.')
+
+    def _set_in_code_list(self, exp_idx: List[int], codes: List[str]) -> None:
+        """Register codes, retrying with padCode on a hierarchical miss."""
+        cur = list(codes)
+        for _ in range(len(exp_idx)):
+            ok, err, ev = self._tau.set_in_code_list(exp_idx, cur)
+            if ok:
+                return
+            if err != _ERR_CODENOTINCODELIST:
+                raise BatchError(
+                    f"SetInCodeList failed: {self._tau.error_string(err)} codes={cur}")
+            var = self._metadata.variables[exp_idx[ev]]
+            cur[ev] = var.pad_code(cur[ev])
+        raise BatchError(f"SetInCodeList failed: code not in code list codes={codes}")
+
+    def _set_in_table(self, idx: int, cell: dict) -> None:
+        """Fill one cell (codes already normalised by ``_build_cell``)."""
+        codes = cell["codes"]
+        ok = self._tau.set_in_table(
+            index=idx, codes=codes, shadow=cell["shadow"], cost=cell["cost"],
+            response=cell["response"], freq=cell["freq"],
+            max_score_cell=cell["max_score"], max_score_holding=[],
+            status=cell["status"], lpl=cell["lower"], upl=cell["upper"])
+        if not ok:
+            raise BatchError(
+                f"SetInTable failed for table {idx + 1}: codes={codes}")
+
+    def _backup_cell_statuses(self, idx: int):
+        ncell, _ = self._tau.get_total_table_size(idx)
+        statuses = []
+        lpls = []
+        upls = []
+        for nc in range(ncell):
+            statuses.append(self._tau.get_table_cell_status(idx, nc))
+            l, u = self._tau.get_table_cell_protection_levels(idx, nc)
+            lpls.append(l)
+            upls.append(u)
+        return statuses, lpls, upls
+
+    def _restore_cell_statuses(self, idx: int, backup) -> None:
+        statuses, lpls, upls = backup
+        for nc, st in enumerate(statuses):
+            if st in (CS_UNKNOWN, CS_EMPTY, 13):  # UNKNOWN/EMPTY/EMPTY_NONSTRUCT
+                continue
+            self._tau.set_table_cell_status_cell(idx, nc, st)
+            self._tau.set_table_cell_protection_levels(idx, nc, lpls[nc], upls[nc])
+
+    def _call_set_table_safety_info(self, idx: int, srs: SafetyRuleSet) -> None:
+        """Port of the Java ``SetTableSafetyInfo`` call for a tabular table."""
+        has_max_score = self._metadata.contains("TOP_N")
+        dom_n = list(srs.dom_n)
+        dom_k = list(srs.dom_k)
+        while len(dom_n) < 4:
+            dom_n.append(0)
+            dom_k.append(0)
+        # Java passes domN as DominanceNumber and domK as DominancePerc.
+        pq_p = list(srs.pq_p)
+        pq_q = list(srs.pq_q)
+        pq_n = list(srs.pq_n)
+        while len(pq_p) < 4:
+            pq_p.append(0)
+            pq_q.append(0)
+            pq_n.append(0)
+        has_freq = bool(srs.min_freq)
+        freq_perc = srs.freq_marge[0] if srs.freq_marge else 0
+        safe_min_rec = srs.min_freq[0] if srs.min_freq else 1
+        # useStatusOnly: no (non-MAN) safety rule → status is used directly.
+        has_status = not (srs.dom_rule or srs.pq_rule or srs.min_freq
+                          or srs.zero_rule or srs.apply_weight or srs.apply_peep)
+        ok = self._tau.set_table_safety_info(
+            index=idx,
+            has_max_score=has_max_score,
+            dominance_rule=srs.dom_rule,
+            dominance_number=dom_n,
+            dominance_perc=dom_k,
+            pq_rule=srs.pq_rule,
+            pq_p=pq_p, pq_q=pq_q, pq_n=pq_n,
+            has_freq=has_freq,
+            freq_safety_perc=freq_perc,
+            safe_min_rec=safe_min_rec,
+            has_status=has_status,
+            manual_safety_perc=srs.manual_perc,
+            apply_zero_rule=srs.zero_rule,
+            zero_safety_range=srs.zero_range,
+            empty_as_non_structural=False,
+            ns_empty_safety_range=10,
+        )
+        if not ok:
+            raise BatchError(f"SetTableSafetyInfo failed for table {idx + 1}")
 
     # -- suppress ------------------------------------------------------------
     def suppress(self, cmd: Suppress) -> None:
@@ -1117,10 +1551,11 @@ class Engine:
             logger.info("Open microdata: %s", cmd.file)
         elif isinstance(cmd, OpenTableData):
             self._data_file = self._resolve_arb_path(cmd.file)
+            self._is_table = True
             logger.info("Open table data: %s", cmd.file)
         elif isinstance(cmd, OpenMetadata):
             meta_path = self._resolve_arb_path(cmd.file)
-            self._metadata = parse_rda(meta_path)
+            self._metadata = parse_rda_table(meta_path) if self._is_table else parse_rda(meta_path)
             logger.info("Loaded metadata: %d variables.", len(self._metadata.variables))
             # Set variable indices
             for i, v in enumerate(self._metadata.variables):
