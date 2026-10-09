@@ -19,13 +19,13 @@ tables     Compute, then print a per-table summary.
 version    Print the engine version and exit.
 
 Example:
-    tau-argus run data/TestRecode.arb
-    tau-argus explore data/TestRecode.arb
-    tau-argus specify data/tau_testW.asc data/tau_testW.rda \\
+    tauargus run data/TestRecode.arb
+    tauargus explore data/TestRecode.arb
+    tauargus specify data/tau_testW.asc data/tau_testW.rda \\
         --table '"Size","Region"|Var2' --safety 'NK(2,75)' --save out.csv
-    tau-argus audit data/TestRecode.arb
-    tau-argus save data/TestRecode.arb --format csv --out tables.csv
-    tau-argus suppress data/TestRecode.arb --method MOD --tab 1
+    tauargus audit data/TestRecode.arb
+    tauargus save data/TestRecode.arb --format csv --out tables.csv
+    tauargus suppress data/TestRecode.arb --method MOD --tab 1
 """
 
 from __future__ import annotations
@@ -337,7 +337,7 @@ def cmd_version(args) -> int:
 # ===========================================================================
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="tau-argus",
+        prog="tauargus",
         description="Headless Tau-Argus: SDC with open-source solvers (HiGHS).",
     )
     p.add_argument("-v", "--version", action="store_true",

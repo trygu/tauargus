@@ -126,6 +126,30 @@ fix (LP lifecycle: `load_lp` in read_prob / `unload_lp` paths) — see PROGRESS.
   `GetTableCell` cost field is a different store (legacy read cost from the
   Java-side cell cache). `GetVarCodeProperties` returns ok=False for all
   non-hierarchical codes → apriori builds its code index from `GetVarCode`.
+- **Task 3 `cover`**: `Engine._protect_cover_table` + `for_cover_table`; 4 tests.
+- **Intervalle (audit) source** pinned as submodule `reference/intervalle`
+  (`430b67b`) — the Pascal/FPC reference the native audit port mirrors.
+
+## Submodule + README cleanup (2026-10-09)
+Legacy cruft removed from all five `native/` submodules and the top-level
+README rewritten for the rewrite. Per repo (submodule commit first, then
+parent pointer bump):
+- **core** `894f4c0`: dropped `Help/` (66 HTML), `nbproject/`, `NBMakefile`/
+  `MakefileRobert`/`MakefileAction`/`Makefile`, `.github/` (stale Java-DLL CI),
+  and the COM/VB6/SWIG sources in `src/` (GhmiterANCO, TauArgCtrl, StdAfx,
+  NewTauArgus, TauArgusJava_wrap, `.dsp`/`.dsw`/`.idl`/`.rc`, images). 112 files.
+- **csp** `e3a2b84`: dropped `nbproject/`, old Makefiles, dead `CSPLOAD.H`.
+- **hitas** `25d935a`: dropped `nbproject/`, old Makefiles, SWIG `hitasctrl.swg`,
+  generated `dist/` Java stubs, `.dep.inc`, dead `APCSPglobs.h`/`pcspmain.h`
+  + untracked CPLEX/XPRESS solver headers.
+- **crp** `571b3f5`: dropped CPLEX/XPRESS solver variants (`crpC*`/`crpX*`),
+  `XXRounder/` + its CMake option, `nbproject/`, `Makefile`, `crp.pc.in`,
+  stale `build.yml` (referenced removed `-DUSE_SCIP`), 6-line `WrapCRP.h` stub.
+- **rounder** `1981385`: dropped `nbproject/`, `Makefile`, `RounderCtrl.swg`,
+  `.dep.inc`.
+Top-level `README.md` rewritten: native-rewrite overview, module table, HiGHS
+build + `uv` CLI usage, tests. (Parent-root legacy files — `Makefile`,
+`build.xml`, `nbproject/`, old manual PDFs, runtime logs — left for Task 8.)
 
 (The older "OPEN BUG: HiGHS teardown segfault" note above is RESOLVED — see
 the CSP/HiGHS teardown checkpoint in PROGRESS.md / `docs/native-debugging.md`.)

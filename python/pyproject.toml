@@ -14,7 +14,7 @@ dependencies = []
 test = ["pytest"]
 
 [project.scripts]
-tau-argus = "tauargus.cli:main"
+tauargus = "tauargus.cli:main"
 
 [tool.scikit-build]
 cmake.version = ">=3.16"
