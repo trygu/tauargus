@@ -25,11 +25,11 @@ Wheels are built for Python 3.10–3.13 on:
 
 | Platform | Architecture |
 |----------|--------------|
-| macOS    | arm64 (3.10–3.13), x86_64 (3.12–3.13) |
-| Linux (manylinux2014) | x86_64 |
+| macOS    | arm64 (Apple Silicon) |
+| Linux (manylinux_2_28) | x86_64 |
 | Windows  | x64 |
 
-Linux ARM and Windows ARM are not built. Wheels are also published to PyPI
+Intel Macs, Linux ARM and Windows ARM are not built. Wheels are also published to PyPI
 when the maintainers enable it; otherwise use the Releases page.
 
 ## Quick start

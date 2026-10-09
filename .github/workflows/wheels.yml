@@ -42,18 +42,13 @@ env:
 
 jobs:
   build-macos:
-    name: macos-${{ matrix.os == 'macos-14' && 'arm64' || 'x86_64' }} py${{ matrix.python }}
+    name: macos-arm64 py${{ matrix.python }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, macos-15-intel]
+        os: [macos-14]
         python: ["3.10", "3.11", "3.12", "3.13"]
-        exclude:
-          - os: macos-15-intel
-            python: "3.10"
-          - os: macos-15-intel
-            python: "3.11"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -117,7 +112,7 @@ jobs:
       - name: Upload wheel
         uses: actions/upload-artifact@v4
         with:
-          name: pytauargus-macos-${{ matrix.os == 'macos-14' && 'arm64' || 'x86_64' }}-py${{ matrix.python }}
+          name: pytauargus-macos-arm64-py${{ matrix.python }}
           path: repaired/*.whl
           if-no-files-found: error
 
