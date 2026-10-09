@@ -122,10 +122,10 @@ jobs:
           if-no-files-found: error
 
   build-linux:
-    name: manylinux2014 py${{ matrix.python }}
+    name: manylinux2028 py${{ matrix.python }}
     runs-on: ubuntu-24.04
     container:
-      image: quay.io/pypa/manylinux2014_x86_64:latest
+      image: quay.io/pypa/manylinux_2_28_x86_64:latest
     strategy:
       fail-fast: false
       matrix:
@@ -171,8 +171,7 @@ jobs:
       - name: Repair wheel (bundle HiGHS + engine libs)
         run: |
           set -euo pipefail
-          auditwheel repair wheelhouse/*.whl -w repaired \
-            -l /opt/_conDA/conda/lib/libstdc++.so.6
+          auditwheel repair wheelhouse/*.whl -w repaired
 
       - name: Upload wheel
         uses: actions/upload-artifact@v4
