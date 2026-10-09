@@ -6,8 +6,8 @@ build-backend = "scikit_build_core.build"
 name = "pytauargus"
 version = "0.1.0"
 description = "Tau-Argus: Statistical Disclosure Control, open-source solvers (HiGHS) + Python CLI"
-requires-python = ">=3.9"
-license = { text = "EUPL-1.1" }
+requires-python = ">=3.10"
+license = { text = "EUPL-1.2" }
 dependencies = []
 
 [project.optional-dependencies]
