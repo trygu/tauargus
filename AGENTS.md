@@ -24,8 +24,6 @@ Port SDC tool to HiGHS solver, portable cloud-native build, and headless Python 
   file formats, `.arb` batch grammar, parameters, and SDC mathematics. The rewrite must be a
   **drop-in replacement** for legacy τ-ARGUS: match its observable behavior, file I/O, and outputs.
   Part I (agent reference) is task-oriented; Part II is the page-by-page transcription.
-- **`reference/intervalle/`** — the legacy `intervalle.exe` audit program (Pascal/FPC submodule).
-  Reference implementation for the audit (intervals) + synthetic values; target of the native port.
 
 ## 4. Architecture & Boundaries
 - Layout: `engine/` (C/C++ core) + `bindings/` (per-language front-ends).
