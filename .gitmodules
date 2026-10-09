@@ -1,0 +1,20 @@
+[submodule "engine/native/csp"]
+	path = engine/native/csp
+	url = https://github.com/trygu/CSP.git
+	branch = rewrite
+[submodule "engine/native/crp"]
+	path = engine/native/crp
+	url = https://github.com/trygu/CRP.git
+	branch = rewrite
+[submodule "engine/native/hitas"]
+	path = engine/native/hitas
+	url = https://github.com/trygu/tauhitas.git
+	branch = rewrite
+[submodule "engine/native/rounder"]
+	path = engine/native/rounder
+	url = https://github.com/trygu/taurounder.git
+	branch = rewrite
+[submodule "engine/native/core"]
+	path = engine/native/core
+	url = https://github.com/trygu/libtauargus.git
+	branch = rewrite

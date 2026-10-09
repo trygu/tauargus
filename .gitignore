@@ -7,3 +7,16 @@
 /*.ilm
 /*.xpr
 /*.il*
+*.log
+*.dat
+*.lp
+*.bra
+*.heu
+*.sta
+CSPlogfile.txt
+bindings/python/build/
+bindings/python/build-make/
+bindings/python/dist/
+engine/native/build/
+engine/build/
+*.DS_Store
