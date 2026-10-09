@@ -59,20 +59,44 @@ A Python binding (`pytauargus`) wraps the engine and provides the
 .arb batch  →  tauargus CLI  →  native engine  →  HiGHS
 ```
 
-## Quick start
+## Installation
+
+The engine depends on [HiGHS](https://github.com/ERGO-Code/HiGHS) at
+runtime. Install it first:
+
+| Platform | Command |
+|----------|---------|
+| macOS (Homebrew) | `brew install highs` |
+| Linux (Debian/Ubuntu) | `sudo apt-get install libhighs-dev` |
+| Other | [Build from source](https://github.com/ERGO-Code/HiGHS#building) and note the CMake dir |
+
+Then build and install the `tauargus` command:
 
 ```bash
-# from the source tree
+cd bindings/python
+uv sync                  # sets up the environment + builds the native extension
+uv build --wheel         # produces dist/pytauargus-*.whl
+uv tool install --force dist/pytauargus-*.whl   # installs `tauargus` on PATH
+```
+
+`uv tool` keeps the tool in an isolated environment; no venv activation
+needed. Verify:
+
+```bash
+tauargus --version       # → 1.1.4.11
+```
+
+> **Not yet on PyPI.** The current wheel is built for the host platform and
+> links HiGHS at its install path. Cross-platform publishing (cibuildwheel +
+> bundled HiGHS) is planned — see the roadmap. For now, `uv tool install`
+> from a locally built wheel is the way.
+
+### Quick start (from source, no install)
+
+```bash
 cd bindings/python
 uv sync
 uv run tauargus run ../../data/TestRecode.arb
-```
-
-Or install the `tauargus` command from a built wheel:
-
-```bash
-uv build --wheel
-uv tool install --force --reinstall dist/pytauargus-*.whl
 ```
 
 ## Using the CLI
