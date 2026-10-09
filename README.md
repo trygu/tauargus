@@ -1,54 +1,90 @@
-# tauargus-engine — τ-ARGUS native rewrite (open-source solvers, headless CLI)
+# tauargus-engine
 
-A ground-up port of the legacy τ-ARGUS statistical-disclosure-control (SDC)
-product. The original Java/Swing front-end and the commercial CPLEX / XPRESS /
-SCIP solvers are gone. This rewrite:
+A native rewrite of **τ-ARGUS**, the statistical disclosure control (SDC)
+engine used by statistics agencies to anonymize official statistics before
+publication.
 
-- uses **open-source HiGHS** as the only solver backend (LP and MIP),
-- is a **portable, cloud-native** C++ engine with a CMake build,
-- ships a **headless Python CLI** that runs the same `.arb` batch files the
-  legacy product understood — a drop-in replacement for the legacy front-end.
+## What it does
 
-The rewrite is a **drop-in replacement**: it matches the observable behavior,
-file I/O, and outputs of legacy τ-ARGUS 4.1.
+When a statistics agency publishes a table (population, income, employment,
+...), small cell counts can reveal who is who — if only 2 people in a region
+fall into an income band, their records are effectively identifiable. SDC
+prevents that before publication:
 
-> The legacy Java front-end still lives in `src/` as a read-only reference and
-> is scheduled for deletion in a later task. Build and usage go through the
-> native engine + Python layer, not `src/`.
+- **Suppression** — hide the cells that would give too much away, without
+  making the table useless.
+- **Controlled rounding** — round cells to a base (e.g. 5 or 10) so no
+  individual value is identifiable, while keeping row and column totals
+  consistent.
+- **Auditing** — check that the published table cannot be reversed to
+  recover the original data.
 
-## Architecture
+τ-ARGUS runs this whole pipeline from a declarative `.arb` batch file:
+load microdata → compute tables → suppress or round → audit → save. This
+rewrite is a **drop-in replacement for legacy τ-ARGUS 4.1**: same batch
+files, same file I/O, same output.
 
-Five C/C++ git submodules under `engine/native/`, all built with CMake:
+## How it works
 
-| Module | Role | Solver backend |
-|--------|------|----------------|
-| `core`   | Data model, Argus/JJ file I/O, SDC engine entry points (static) | solver-independent |
-| `csp`    | Cell-suppression LP (branch-and-price) + the **intervalle audit** | HiGHS (LP) |
-| `hitas`  | Hierarchical table suppression (HiTaS) | via `csp` (HiGHS) |
-| `crp`    | Controlled rounding problem (iterative rounding + auditing) | HiGHS (MIP) |
-| `rounder`| Thin dispatch layer over `crp` | via `crp` (HiGHS) |
+The engine is C++, built from five modules that converge on the open-source
+[HiGHS](https://github.com/ERGO-Code/HiGHS) solver (the legacy commercial
+CPLEX/XPRESS/SCIP backends are gone):
 
-A **Python layer** (`bindings/python/`) wraps the native engine with pybind11.
-The package is **`pytauargus`** (import name), which exposes the **`tauargus`**
-command-line tool. The native build is consumed by the Python build via
-**scikit-build-core**.
+| Module | Role |
+|--------|------|
+| `core`   | Data model, Argus/JJ file I/O, SDC engine entry points |
+| `csp`    | Cell-suppression LP (branch-and-price) + feasibility audit |
+| `hitas`  | Hierarchical table suppression (HiTaS) |
+| `crp`    | Controlled rounding (iterative rounding + audit) |
+| `rounder`| Dispatch layer over `crp` |
+
+A Python binding (`pytauargus`) wraps the engine and provides the
+**`tauargus`** command-line tool:
 
 ```
-.arb batch  →  tauargus CLI  →  Engine (python)  →  native core/csp/hitas/crp/rounder  →  HiGHS
+.arb batch  →  tauargus CLI  →  native engine  →  HiGHS
 ```
+
+## Quick start
+
+```bash
+# from the source tree
+cd bindings/python
+uv sync
+uv run tauargus run ../../data/TestRecode.arb
+```
+
+Or install the `tauargus` command from a built wheel:
+
+```bash
+uv build --wheel
+uv tool install --force --reinstall dist/pytauargus-*.whl
+```
+
+## Using the CLI
+
+```bash
+tauargus run      mybatch.arb    # parse and execute a batch file
+tauargus compute  mybatch.arb    # table computation only
+tauargus suppress mybatch.arb    # compute, then apply suppression
+tauargus round    mybatch.arb    # compute, then round
+tauargus audit    mybatch.arb    # audit: feasibility intervals of suppressed cells
+tauargus save     mybatch.arb    # compute, then write tables
+tauargus tables   mybatch.arb    # print a table summary
+```
+
+Example fixtures live in `data/`.
 
 ## Requirements
 
-- CMake ≥ 3.16, a C++11/C99 toolchain
-- **HiGHS** (installed, with its CMake package):
-  - macOS: `brew install highs`
-  - Linux: `sudo apt-get install libhighs-dev` (or build from source)
-  - Windows: build/install from source, then point at its CMake dir
+- CMake ≥ 3.16, a C++11 toolchain
+- **HiGHS** with its CMake package: `brew install highs` (macOS),
+  `sudo apt-get install libhighs-dev` (Linux)
 - Python 3.10+ and [`uv`](https://docs.astral.sh/uv/) for the Python layer
 
-## Build
+## Building from source
 
-Build the native engine (all five submodules) via the superbuild:
+Build the native engine:
 
 ```bash
 cmake -S engine -B engine/build \
@@ -56,8 +92,8 @@ cmake -S engine -B engine/build \
 cmake --build engine/build -j
 ```
 
-Build the Python package (scikit-build-core drives the native CMake build
-and links the five engines, then compiles the pybind11 module):
+Build the Python package (scikit-build-core drives the CMake build and
+compiles the pybind11 module):
 
 ```bash
 cd bindings/python
@@ -65,42 +101,15 @@ uv sync
 uv build --wheel
 ```
 
-Run the CLI directly from the source tree without installing:
-
-```bash
-cd bindings/python
-uv run tauargus --help
-```
-
-To install the `tauargus` command from a fresh wheel:
-
-```bash
-uv tool install --force --reinstall dist/pytauargus-*.whl
-```
-
-> For fast in-tree iteration on the C++ bindings, configure the extension
-> against `bindings/python/CMakeLists.txt` in a local `build-make/` dir and
-> point `-Dpybind11_DIR` at the venv. See `bindings/python/CMakeLists.txt`.
-
-## Using the CLI
-
-```bash
-tauargus --help
-tauargus run        mybatch.arb      # parse and execute a batch file
-tauargus compute    mybatch.arb      # table computation only
-tauargus suppress   mybatch.arb      # compute, then apply suppression
-tauargus round      mybatch.arb      # compute, then round (RND)
-tauargus audit      mybatch.arb      # audit: feasibility intervals of suppressed cells
-tauargus save       mybatch.arb -o out   # compute, then write tables
-tauargus tables     mybatch.arb      # print a table summary
-```
-
-Example fixtures live in `data/` (e.g. `data/tableinput/`).
+> For fast in-tree iteration on the C++ bindings, configure against
+> `bindings/python/CMakeLists.txt` in a local `build-make/` dir and point
+> `-Dpybind11_DIR` at the venv.
 
 ## Testing
 
 ```bash
 cd bindings/python
+uv sync --extra test
 uv run pytest        # 99 tests: native contracts + engine + CLI
 ```
 
@@ -112,34 +121,24 @@ uv run pytest        # 99 tests: native contracts + engine + CLI
 │   ├── CMakeLists.txt      #   superbuild: configures & builds all five submodules
 │   └── native/             #   the 5 git submodules
 │       ├── core/           #     data model, Argus/JJ I/O, SDC engine (static lib)
-│       ├── csp/            #     cell-suppression LP + intervall audit (HiGHS LP)
+│       ├── csp/            #     cell-suppression LP + feasibility audit (HiGHS LP)
 │       ├── hitas/          #     hierarchical suppression (links csp)
-│       ├── crp/            #     controlled-rounding MIP (HiGHS MIP)
+│       ├── crp/            #     controlled-rounding (HiGHS MIP)
 │       └── rounder/        #     thin dispatch layer over crp
 │
 ├── bindings/               # per-language front-ends (Python now, R planned)
 │   └── python/             #   pybind11 bindings + `pytauargus` package
-│       ├── CMakeLists.txt  #     builds the `_tauargus` extension into src/pytauargus/
-│       ├── pyproject.toml  #     package metadata + `tauargus` console script
 │       ├── cpp/            #     bindings: bind_core/csp/hitas/rounder + module.cpp
 │       ├── src/pytauargus/ #     the Python package (engine.py, cli.py, batch.py)
-│       │   └── _tauargus.*.so  #   compiled extension + bundled libtauargus_*.dylibs
 │       └── tests/          #     pytest suite (99 tests)
 │
 ├── data/                   # sample `.arb` batches + tabular fixtures
 ├── reference/              # read-only reference implementations
 │   ├── intervale/          #   legacy intervall.exe audit (Pascal/FPC)
-│   └── rtauargus/          #   R package wrapping the legacy binary — its docs
-│                           #   and example data are used to cross-check our port
+│   └── rtauargus/          #   (planned) R package — oracle for cross-checking
 ├── docs/                   # legacy τ-ARGUS 4.1 manual bundle + design notes
 └── src/                    # legacy Java/Swing front-end (read-only, pending deletion)
 ```
-
-`reference/rtauargus` is a third-party R package that wraps the original
-τ-ARGUS binary. We don't build against it, but its **documentation and
-example data** are a useful independent oracle while the port is still being
-verified — handy for confirming our output matches the reference
-implementation before the legacy code is fully retired.
 
 ## License
 
