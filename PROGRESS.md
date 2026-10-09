@@ -13,20 +13,19 @@ Goal: HiGHS solvers, portable cloud-native build, headless Python CLI replacing 
   READMEs rewritten; CLI `tau-argus` → `tauargus`.
 - [x] **pytauargus rename** (`7a6ff3d`): package `tauargus`→`pytauargus`
   (CLI stays `tauargus`); wheel self-contained via CMake `install()`.
-- [x] **engine/+bindings/ restructure**: `native/`→`engine/native/`,
-  superbuild → `engine/CMakeLists.txt`, `python/`→`bindings/python/`;
-  `libCRP.dylib` bundled (rounder links it).
-- [x] **Self-contained wheel + cross-platform CI** (2026-10-09):
-  platform-aware binding CMake (dylib/so/dll); `wheels.yml` builds HiGHS
-  from source + engine + `pip wheel` + delocate/auditwheel/delvewheel
-  repair → GitHub Release assets (+ optional PyPI on tag). macOS leg
-  verified end-to-end; Linux/Windows pending a CI run.
+- [x] **engine/+bindings/ restructure**; `libCRP.dylib` bundled (rounder links it).
+- [x] **Self-contained wheel + x-platform CI** (2026-10-09): platform-aware
+  binding CMake; `wheels.yml` = HiGHS src + engine + `pip wheel` + repair
+  (delocate/auditwheel/delvewheel) → GitHub Release (+ opt PyPI). macOS
+  leg verified end-to-end; Linux/Windows pending a CI run.
+- [x] **Root cleanup** (2026-10-09): legacy Java-era files + `nbproject/`
+  + `reference/intervalle` submodule removed; `src/` Java kept (Task 8).
 
 ## Next (priority order)
 1. Validate Linux/Windows legs of wheels.yml in CI; publish first release.
 2. Task 1: document solver strategy (legacy roles → HiGHS); Dockerfile.
 3. **ANSI-UI (SPLIT OUT, `docs/ui-design.md`)**: TUI vs headless-CLI-only (rec: headless).
-4. Task 8 (BLOCKED on #3): keep `src/` Java + parent-root legacy until UI decision.
+4. Task 8 (BLOCKED on #3): keep `src/` Java until UI decision.
 
 ## Watch items
 - `deleterows`/`deleterow` (cspsolve.c) compact `rind` before `JJdelsetrows` (latent).

@@ -201,3 +201,21 @@ the CSP/HiGHS teardown checkpoint in PROGRESS.md / `docs/native-debugging.md`.)
 - **Known gaps (need a real CI run):** Linux auditwheel `--exclude` for libstdc++
   and the manylinux CPython path; Windows delvewheel HiGHS DLL discovery. The
   macOS leg is fully proven locally.
+
+## Submodule + root cleanup (2026-10-09)
+- **`reference/intervalle` submodule dropped** (`6115cbd`): the audit is fully
+  ported natively (`TauAuditJj` in `engine/native/csp`), so the Pascal reference
+  is no longer needed in-tree. The upstream repo (sdcTools/intervalle) stays
+  available for cross-checks.
+- **Legacy Java-era root files removed**: `BUILDINFO.TXT`, `Error.txt`,
+  `ErrorStrings.txt`, `MAKEINFO`, `Makefile`, `TauArgus.properties`,
+  `TauManualV4.0.pdf` / `TauManualV4.1.pdf` (superseded by
+  `docs/tau-argus-4.1-markdown-bundle/`), `TauNews.html`, `_TauChanges.txt`,
+  `build.xml`, `manifest.mf`, `tau-Argus_CTA_help.pdf`, `tauARGUS.css`, and
+  the whole `nbproject/` NetBeans tree. Untracked runtime output
+  (`.DS_Store`, `CSPlogfile.txt`, `HiTaS.log`, `Highs.log`, `JJUit.dat`,
+  `cspSCIP.*`, `hierinfo.dat`, `sdc.lp`) deleted from disk.
+- `.gitattributes` slimmed (dropped `*.java`/`*.form`/`*.properties` rules;
+  added `*.pdf` binary). Root now contains only: docs, `engine/`,
+  `bindings/`, `data/`, `src/` (Java, kept for Task 8), and top-level
+  project files.
