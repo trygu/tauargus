@@ -159,7 +159,7 @@ jobs:
           set -euo pipefail
           cmake -S engine -B engine/build \
             -DCMAKE_BUILD_TYPE=Release \
-            -DHighs_DIR="${{ steps.highs.outputs.prefix }}/lib/cmake/Highs"
+            -DHighs_DIR="$(dirname "$(find "${{ steps.highs.outputs.prefix }}" -name "[Hh]ighs[Cc]onfig.cmake" -o -name highs-config.cmake | head -n1)")"
           cmake --build engine/build -j
 
       - name: Build wheel
@@ -212,8 +212,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TESTING=OFF \
             -DCMAKE_INSTALL_PREFIX="$PREFIX"
-          cmake --build highs/build -j
-          cmake --install highs/build
+          cmake --build highs/build -j --config Release
+          cmake --install highs/build --config Release
           touch "$PREFIX/.done"
           echo "prefix=$PREFIX" >> "$GITHUB_OUTPUT"
 
@@ -227,8 +227,8 @@ jobs:
           fi
           cmake -S engine -B engine/build \
             -DCMAKE_BUILD_TYPE=Release \
-            -DHighs_DIR="${{ steps.highs.outputs.prefix }}/lib/cmake/Highs"
-          cmake --build engine/build -j
+            -DHighs_DIR="$(dirname "$(find "${{ steps.highs.outputs.prefix }}" -name "[Hh]ighs[Cc]onfig.cmake" -o -name highs-config.cmake | head -n1)")"
+          cmake --build engine/build -j --config Release
           touch engine/build/.done
 
       - name: Build wheel
