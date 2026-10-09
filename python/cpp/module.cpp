@@ -12,6 +12,7 @@ namespace py = pybind11;
 PYBIND11_MODULE(_tauargus, m) {
     m.doc() = "Tau-Argus native SDC engine (HiGHS-backed)";
     init_core(m);
+    init_csp(m);
     init_hitas(m);
     init_rounder(m);
 }
