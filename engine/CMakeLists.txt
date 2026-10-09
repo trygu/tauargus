@@ -20,6 +20,9 @@ project(tauargus_native C CXX)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# The static core lib is linked into the Python extension (a shared object).
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 # Centralize build outputs: all shared/static libs in <build>/lib, binaries in
 # <build>/bin. (Directory-scoped; inherited by the add_subdirectory calls below.)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
