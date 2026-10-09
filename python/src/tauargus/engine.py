@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
-from ._tauargus import TauArgus, HiTaSCtrl, RounderCtrl
+from ._tauargus import HiTaSCtrl, RounderCtrl, TauArgus, audit_jj
 from .batch import (
     BatchError,
     Command,
@@ -675,6 +675,8 @@ class Engine:
         self._work_dir: Path = Path.cwd()
         self._rounded_tables: set = set()  # indices of tables marked rounded (RND)
         self._protect_cover_table: bool = False  # legacy <COVER> global flag
+        # Cell audit (intervalle) results: tab index -> {cell: (min, max, unsafe)}
+        self._audit: Dict[int, Dict[int, Tuple[float, float, bool]]] = {}
 
     # -- property accessors --------------------------------------------------
     @property
@@ -1460,6 +1462,45 @@ class Engine:
             )
             logger.info("CKM cont: table %d processed.", tab + 1)
 
+    # -- audit -----------------------------------------------------------------
+    def audit(self, tab: int) -> List[dict]:
+        """Compute realized feasibility intervals for table ``tab`` (0-based).
+
+        Port of legacy ``OptiSuppress.RunAudit``: write the table to a JJ file
+        (same flags as OPT), run the native audit (the port of
+        ``intervalle.exe``; ``dateirechnen=primsec``), and store each
+        suppressed cell's realized bounds on the table via
+        ``SetRealizedLowerAndUpper`` (readable again through
+        ``get_table_cell`` as the final ``rlower``/``rupper`` pair).
+
+        Returns a list of ``{cell, min, max, value, status, unsafe}`` dicts in
+        ascending cell-index order (empty when the table has no
+        primary/secondary suppressed cells).
+        """
+        import os
+        import tempfile
+
+        lo, hi = self._table_cell_bounds(tab)
+        with tempfile.TemporaryDirectory() as tmp:
+            jj = os.path.join(tmp, "Anneke.JJ")
+            if not self._tau.write_jj_format(tab, jj, lo, hi, False, False, False):
+                raise BatchError("WriteJJFormat failed for AUDIT")
+            rows = audit_jj(jj)
+
+        by_cell: Dict[int, Tuple[float, float, bool]] = {}
+        for r in rows:
+            ok = self._tau.set_realized_lower_and_upper(tab, r["cell"],
+                                                        r["max"], r["min"])
+            if not ok:
+                # Legacy raises; the status gate should never reject a
+                # suppressed (u/m) cell.
+                raise BatchError(
+                    f"Audit: could not store realized bounds for cell {r['cell']}")
+            by_cell[r["cell"]] = (r["min"], r["max"], bool(r["unsafe"]))
+        self._audit[tab] = by_cell
+        logger.info("Audit: table %d — %d cells audited.", tab + 1, len(rows))
+        return rows
+
     # -- recode ---------------------------------------------------------------
     def recode(self, cmd: Recode) -> None:
         """Apply a recode to a variable (by name, from the current table context).
@@ -1573,12 +1614,17 @@ class Engine:
     def write_intermediate_table(self, tab: int, path: str,
                                   simple: bool = False,
                                   holding: bool = False,
-                                  suppress_empty: bool = False) -> None:
+                                  suppress_empty: bool = False,
+                                  with_audit: bool = False) -> None:
         """Write the legacy WRITETABLE type-5 (INTERMEDIATE) audit file.
 
         Row-major walk over active codes; port of ``TableSet.write``
-        (TableSet.java:1281-1419) minus the ``+AR`` audit-interval columns
-        (which require the external ``intervalle.exe``).
+        (TableSet.java:1281-1419). With ``with_audit`` (the legacy ``AR+``
+        option) six extra columns are appended per row: the realized
+        feasibility bounds (``;rlower;rupper;width`` at the table's nDec)
+        plus three relative-width columns (``;0;0;0`` for safe/empty/zero
+        cells, else two-decimal percentages over the published value),
+        matching TableSet.java:1373-1387.
         """
         if not self._metadata:
             raise BatchError("No metadata.")
@@ -1622,8 +1668,11 @@ class Engine:
         for md in max_dim:
             total_cells *= md
 
+        audit_map = self._audit.get(tab, {}) if with_audit else {}
+
         with open(path, "w", encoding="utf-8") as f:
             dim_array = [0] * n_exp
+            cell_idx = 0
             done = False
             while not done:
                 status = 0
@@ -1686,8 +1735,27 @@ class Engine:
                     parts.append(_status_symbol(status))
                     parts.append(f"{lower:.{n_dec}f}")
                     parts.append(f"{upper:.{n_dec}f}")
+                    if with_audit:
+                        if cell_idx in audit_map:
+                            rlo, rup, _unsaf = audit_map[cell_idx]
+                        else:
+                            rlo = rup = 0.0
+                        parts.append(f"{rlo:.{n_dec}f}")
+                        parts.append(f"{rup:.{n_dec}f}")
+                        parts.append(f"{rup - rlo:.{n_dec}f}")
+                        # Legacy: response==0 or safe-not-protected
+                        # (CellStatus category SAFE_NOT_PROTECTED =
+                        # {1, 2, 13}) -> zeros; else percentages.
+                        if rv == 0 or status in (CS_SAFE, CS_SAFE_MANUAL,
+                                                 CS_EMPTY_NONSTRUCT):
+                            parts.extend(["0", "0", "0"])
+                        else:
+                            parts.append(f"{100 * (rv - rlo) / rv:.2f}")
+                            parts.append(f"{100 * (rup - rv) / rv:.2f}")
+                            parts.append(f"{100 * (rup - rlo) / rv:.2f}")
                     f.write(";".join(parts) + "\n")
 
+                cell_idx += 1
                 # advance dim_array (odometer, rightmost = last var)
                 k = n_exp - 1
                 while k >= 0:
@@ -1712,10 +1780,16 @@ class Engine:
             simple = "+SO" in opts
             holding = "+HI" in opts
             suppress_empty = "+SE" in opts
+            # AR+: audit the table first (legacy SaveTable runs the
+            # intervalle audit right before writing when the flag is set).
+            with_audit = "+AR" in opts
+            if with_audit:
+                self.audit(tab)
             self.write_intermediate_table(tab, str(fpath),
                                           simple=simple,
                                           holding=holding,
-                                          suppress_empty=suppress_empty)
+                                          suppress_empty=suppress_empty,
+                                          with_audit=with_audit)
         elif cmd.output_type in (2, 3, 4, 6, 7):
             # CellRecords (SBS, code value, etc.)
             self._tau.write_cell_records(tab, str(fpath), True, False,
@@ -2014,6 +2088,7 @@ class Engine:
         self._safety_rules_buf = []
         self._rounded_tables = set()
         self._protect_cover_table = False
+        self._audit = {}
 
         for cmd in commands:
             self._execute(cmd)
@@ -2063,6 +2138,7 @@ class Engine:
             self._metadata = None
             self._rounded_tables = set()
             self._protect_cover_table = False
+            self._audit = {}
             logger.info("Cleared state.")
         elif isinstance(cmd, Solver):
             logger.info("Solver %s: all backends use HiGHS (license ignored).", cmd.name)

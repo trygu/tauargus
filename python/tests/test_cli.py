@@ -110,11 +110,12 @@ def test_tables_summary():
     assert "Region, IndustryCode | Var2" in p.stdout
 
 
-def test_audit_reports_status_counts():
+def test_audit_reports_intervals():
     p = _run_cli(["audit", str(ARB)])
     assert p.returncode == 0
-    assert "safe=" in p.stdout
-    assert "empty=" in p.stdout
+    # Safety-rule unsafe (u) cells are audited per table with realized bounds.
+    assert "cells audited" in p.stdout
+    assert "under-protected" in p.stdout
 
 
 def test_save_csv(tmp_path):

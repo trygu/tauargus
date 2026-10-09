@@ -13,7 +13,7 @@ specify    Specify tables/safety-rules ad hoc and compute them.
 compute    Parse a batch and run the computation (up to ReadMicrodata).
 suppress   Compute, then apply one suppression method to a table.
 round      Compute, then round a table (RND).
-audit      Compute, then report per-cell status counts per table.
+audit      Compute, then audit: report realized feasibility intervals.
 save       Compute, then write tables to file (CSV or cell records).
 tables     Compute, then print a per-table summary.
 version    Print the engine version and exit.
@@ -269,19 +269,26 @@ def cmd_audit(args) -> int:
     arb = Path(args.batch)
     eng = run_batch(arb)
     for i in range(eng._n_tables):
-        ncell, _ = eng._tau.get_total_table_size(i)
-        counts = {}
-        for c in range(ncell):
-            s = eng._tau.get_table_cell_status(i, c)
-            counts[s] = counts.get(s, 0) + 1
-        parts = [f"{_STATUS_NAMES.get(s, s)}={n}" for s, n in sorted(counts.items())]
-        print(f"table {i + 1}: {ncell} cells  " + ", ".join(parts))
+        rows = eng.audit(i)
+        if not rows:
+            print(f"table {i + 1}: no suppressed cells to audit")
+            continue
+        n_unsafe = sum(1 for r in rows if r["unsafe"])
+        print(f"table {i + 1}: {len(rows)} cells audited, "
+              f"{n_unsafe} under-protected")
+        for r in rows:
+            print(f"  cell {r['cell']}: [{r['min']:g}, {r['max']:g}] "
+                  f"value={r['value']:g} status={r['status']}"
+                  + ("  UNSAFE" if r["unsafe"] else ""))
     return 0
 
 
 def cmd_save(args) -> int:
     arb = Path(args.batch)
     eng = run_batch(arb)
+    if args.audit:
+        for i in range(eng._n_tables):
+            eng.audit(i)
     out = Path(args.out) if args.out else None
     default_suffix = ".tab" if args.format == "intermediate" else ".csv"
     for i in range(eng._n_tables):
@@ -297,7 +304,7 @@ def cmd_save(args) -> int:
             eng._tau.write_cell_records(
                 i, str(fpath), False, args.status, False, "", args.unsafe, True, 1)
         elif args.format == "intermediate":
-            eng.write_intermediate_table(i, str(fpath))
+            eng.write_intermediate_table(i, str(fpath), with_audit=args.audit)
         else:
             print(f"error: unknown format {args.format}", file=sys.stderr)
             return 2
@@ -389,12 +396,17 @@ def build_parser() -> argparse.ArgumentParser:
                     help="apply each change to the bogus range (single-child chain)")
     sp.set_defaults(func=cmd_apriori)
 
-    sp = sub.add_parser("audit", help="compute, then report per-cell status counts")
+    sp = sub.add_parser("audit",
+                        help="compute, then audit: realized feasibility "
+                             "intervals of all suppressed cells")
     sp.add_argument("batch")
     sp.set_defaults(func=cmd_audit)
 
     sp = sub.add_parser("save", help="compute, then write tables to file")
     sp.add_argument("batch")
+    sp.add_argument("--audit", action="store_true",
+                    help="run the audit first; with --format intermediate, "
+                         "append the realized-bounds (+AR) columns")
     sp.add_argument("--format", choices=["csv", "cell", "intermediate"], default="csv")
     sp.add_argument("--out", help="output file (one per table if multiple)")
     sp.add_argument("--status", action="store_true",
