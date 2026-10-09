@@ -81,6 +81,12 @@ _ERR_CODENOTINCODELIST = 1017
 _ERR_CELLALREADYFILLED = 1022
 _ERR_CODEDOESNOTEXIST = 1027
 
+# Table additivity modes — must match Java ``TableSet.ADDITIVITY_*``.
+# 0 = check additivity, 1 = recompute marginals, 2 = not required (cover table).
+_ADDITIVITY_CHECK = 0
+_ADDITIVITY_RECOMPUTE = 1
+_ADDITIVITY_NOT_REQUIRED = 2
+
 
 def _status_symbol(status: int) -> str:
     """Intermediate-format status symbol (Java ``CellStatus``/``Category``).
@@ -668,6 +674,7 @@ class Engine:
         self._n_tables: int = 0
         self._work_dir: Path = Path.cwd()
         self._rounded_tables: set = set()  # indices of tables marked rounded (RND)
+        self._protect_cover_table: bool = False  # legacy <COVER> global flag
 
     # -- property accessors --------------------------------------------------
     @property
@@ -958,12 +965,16 @@ class Engine:
                 self._set_in_table(i, cell)
 
             # -- complete the table ------------------------------------------
-            compute_totals = additivity == 1
+            # Legacy: ``computeTotals = (additivity == ADDITIVITY_RECOMPUTE)``.
+            # A cover table (``<COVER>``) has additivity NOT_REQUIRED, so its
+            # marginals are not recomputed and the additivity check is skipped.
+            compute_totals = additivity == _ADDITIVITY_RECOMPUTE
             set_totals_safe = not (srs.freq_marge or srs.dom_rule or srs.pq_rule)
             status_backup = self._backup_cell_statuses(i) if (compute_totals and keep_status) else None
             ok, err = self._tau.completed_table(
                 index=i, file="", compute_totals=compute_totals,
-                calculated_totals_as_safe=set_totals_safe, for_cover_table=False,
+                calculated_totals_as_safe=set_totals_safe,
+                for_cover_table=self._protect_cover_table,
             )
             if not ok:
                 raise BatchError(
@@ -2002,6 +2013,7 @@ class Engine:
         self._tables = []
         self._safety_rules_buf = []
         self._rounded_tables = set()
+        self._protect_cover_table = False
 
         for cmd in commands:
             self._execute(cmd)
@@ -2050,15 +2062,23 @@ class Engine:
             self._safety_rules_buf = []
             self._metadata = None
             self._rounded_tables = set()
+            self._protect_cover_table = False
             logger.info("Cleared state.")
         elif isinstance(cmd, Solver):
             logger.info("Solver %s: all backends use HiGHS (license ignored).", cmd.name)
         elif isinstance(cmd, Apriory):
             self.apply_apriori(cmd)
         elif isinstance(cmd, Cover):
-            logger.warning(
-                "COVER (protect cover table) not yet implemented; "
-                "see docs/ui-design.md / Task 3 for scoping.")
+            # Legacy (batch.java:281): global protect-cover-table flag plus
+            # table 0's additivity set to NOT_REQUIRED. In the legacy flow
+            # ``addAdditivityParamBatch`` resets it on the following
+            # ``<READTABLE>``, so the global flag is what drives the solve:
+            # ``CompletedTable(ForCoverTable=true)`` skips the additivity
+            # check and marginals are not recomputed. The GUI's heavy
+            # LinkedTables machinery (generating cover tables via
+            # intervalle.exe) is out of scope for the headless CLI.
+            self._protect_cover_table = True
+            logger.info("COVER: protect-cover-table enabled (additivity check skipped).")
 
     def _resolve_arb_path(self, filename: str) -> str:
         """Resolve a file path relative to the .arb file's directory."""
