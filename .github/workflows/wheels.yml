@@ -47,12 +47,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, macos-13]
+        os: [macos-14, macos-15-intel]
         python: ["3.10", "3.11", "3.12", "3.13"]
         exclude:
-          - os: macos-13
+          - os: macos-15-intel
             python: "3.10"
-          - os: macos-13
+          - os: macos-15-intel
             python: "3.11"
     steps:
       - uses: actions/checkout@v4
@@ -244,7 +244,9 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install delvewheel
-          delvewheel repair -w repaired wheelhouse/*.whl
+          ENGINE_BIN="$(cygpath -w "$GITHUB_WORKSPACE/engine/build/bin/Release")"
+          HIGHS_BIN="$(cygpath -w "$RUNNER_TEMP/highs-prefix/bin")"
+          delvewheel repair --add-path "$ENGINE_BIN;$HIGHS_BIN" -w repaired wheelhouse/*.whl
 
       - name: Upload wheel
         uses: actions/upload-artifact@v4
