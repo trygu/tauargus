@@ -104,3 +104,28 @@ Symptom: full `uv run pytest` intermittently dies RC 133/139 after a suppress
 test; single suppress tests pass in isolation. Needs a native `native/csp`
 fix (LP lifecycle: `load_lp` in read_prob / `unload_lp` paths) — see PROGRESS.md
 "Current". Not a Python/test issue.
+
+## Completed detailed checkpoints (2026-10-09)
+- WRITETABLE type-5 (INTERMEDIATE) audit file ported (`Engine.write_intermediate_table`),
+  `get_table_cell` pybind binding, `+SO`/`+HI`/`+SE`, CLI `save --format intermediate`.
+  `+AR` realized-interval columns deferred (needs external `intervalle.exe`).
+  Legacy batch number = `safeFileFormat+1` → intermediate is **5** (4=SBS),
+  matching 0-based Java constant `FILE_FORMAT_INTERMEDIATE=4`.
+- Tabular (pre-aggregated) table flow: `data/tableinput/TestTable.arb` runs
+  headless; `engine.read_table` = 3-phase port of Java `TableSet.read`
+  (SetInCodeList → SetTotalsInCodeList → SetTable/SafetyInfo → buildCell/
+  SetInTable → CompletedTable). 7 tests in `test_table_smoke.py`.
+  Note: `pp.tab` subtotals internally inconsistent; `1T` recomputes from
+  leaves, so total cells can differ ~1.0 from the file.
+- Apriori ported (`Engine.apply_apriori`, `_bogus_range`, `_apply_apriori_change`),
+  port of `APriori.processAprioryFile`. Headerless file `<c1>;<c2>;<TYPE>
+  [;v1 [;v2]]`; first line validated AND applied. Types S/U/P/M/ML (status),
+  C/W (cost), PL (prot-level, unsafe cells 3..9 only); AB unimplemented.
+  `--expand-bogus` = single-child chain. CLI verb `apriori`. 9 tests in
+  `test_apriori.py`. Native quirk: `SetTableCellCost` returns True but
+  `GetTableCell` cost field is a different store (legacy read cost from the
+  Java-side cell cache). `GetVarCodeProperties` returns ok=False for all
+  non-hierarchical codes → apriori builds its code index from `GetVarCode`.
+
+(The older "OPEN BUG: HiGHS teardown segfault" note above is RESOLVED — see
+the CSP/HiGHS teardown checkpoint in PROGRESS.md / `docs/native-debugging.md`.)

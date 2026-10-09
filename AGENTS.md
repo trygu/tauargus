@@ -37,6 +37,9 @@ Port SDC tool to HiGHS solver, portable cloud-native build, and headless Python 
   (Preload runtime for Python: `DYLD_INSERT_LIBRARIES="$(clang -print-file-name=libclang_rt.asan_osx_dynamic.dylib)" uv run ...`)
 
 ## 5. Verification & Commits
+- **TDD:** The agent is an avid TDD fan. For every feature/port, write the test
+  *first* (it encodes the legacy contract), watch it fail for the right reason,
+  then implement until green. A feature is not done until its test passes.
 - Verification: `cd python && uv run pytest` | `uv build --wheel`
 - Surgical edits: Use targeted search/replace or patches. Avoid full-file rewrites.
 - Commit cadence: Submodule commit first -> parent submodule bump + `PROGRESS.md` update.

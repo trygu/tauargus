@@ -37,6 +37,7 @@ from typing import List, Optional
 
 from .batch import (
     BatchError,
+    Apriory,
     Suppress,
     WriteTable,
     OpenMicrodata,
@@ -241,6 +242,29 @@ def cmd_round(args) -> int:
     return 0
 
 
+def cmd_apriori(args) -> int:
+    arb = Path(args.batch)
+    eng = run_batch(arb)
+    if args.tab < 1 or args.tab > eng._n_tables:
+        print(f"error: table {args.tab} out of range (1..{eng._n_tables})",
+              file=sys.stderr)
+        return 2
+    ap = Apriory(file=args.file, tab_no=args.tab, separator=args.separator,
+                 ignore_error=not args.strict, expand_bogus=args.expand_bogus)
+    stats = eng.apply_apriori(ap)
+    print(f"ok: apriori applied to table {args.tab} — "
+          f"{stats['lines_read']} lines read, "
+          f"{stats['status_ok']} status, {stats['cost_ok']} cost, "
+          f"{stats['protlevel_ok']} prot-level changes")
+    if stats["lines_error"] or stats["status_err"] or stats["cost_err"] \
+            or stats["protlevel_err"]:
+        print(f"warning: {stats['lines_error']} line / "
+              f"{stats['status_err']} status / {stats['cost_err']} cost / "
+              f"{stats['protlevel_err']} prot-level errors (ignored)",
+              file=sys.stderr)
+    return 0
+
+
 def cmd_audit(args) -> int:
     arb = Path(args.batch)
     eng = run_batch(arb)
@@ -349,6 +373,21 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--base", type=int,
                     help="rounding base (default: table minimum base)")
     sp.set_defaults(func=cmd_round)
+
+    sp = sub.add_parser("apriori",
+                        help="compute, then apply an apriori file to a table")
+    sp.add_argument("batch")
+    sp.add_argument("--file", required=True,
+                    help="apriori file (paths relative to the .arb dir)")
+    sp.add_argument("--tab", type=int, required=True,
+                    help="1-based table number")
+    sp.add_argument("--separator", default=";",
+                    help="field separator in the apriori file (default ';')")
+    sp.add_argument("--strict", action="store_true",
+                    help="raise on the first error instead of ignoring it")
+    sp.add_argument("--expand-bogus", action="store_true",
+                    help="apply each change to the bogus range (single-child chain)")
+    sp.set_defaults(func=cmd_apriori)
 
     sp = sub.add_parser("audit", help="compute, then report per-cell status counts")
     sp.add_argument("batch")

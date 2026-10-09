@@ -13,6 +13,7 @@ Or drive the native engine manually:
 
 from __future__ import annotations
 
+import itertools
 import logging
 import re
 from dataclasses import dataclass, field
@@ -61,10 +62,16 @@ IDENTITY_DIM_SEQUENCE = list(range(10))
 CS_UNKNOWN = 0
 CS_SAFE = 1
 CS_SAFE_MANUAL = 2
+CS_UNSAFE_RULE = 3
 CS_UNSAFE_MANUAL = 9
 CS_PROTECT_MANUAL = 10
 CS_SECONDARY_UNSAFE = 11
 CS_EMPTY = 14
+
+# Apriori change-type sentinels (Java ``AP_ADJUST_*`` in APriori.java).
+_AP_ADJUST_COST = -1
+_AP_ADJUST_PROT_LEVEL = -2
+_AP_ADJUST_APRIORI_BOUND = -3
 
 # Sentinel for an "unparsed" numeric field (Java Cell.UNKNOWN).
 _CELL_UNKNOWN = -999999999
@@ -1706,6 +1713,283 @@ class Engine:
             raise BatchError(f"Unknown output type {cmd.output_type}")
         logger.info("Wrote table %d to %s", tab + 1, fpath)
 
+    # -- apriori --------------------------------------------------------------
+    def _bogus_range(self, vi: int, idx: int,
+                     n_active: int,
+                     levels: List[Tuple[int, int]]) -> List[int]:
+        """Java ``CodeList.bogusRange(activeCodeIndex)`` — a code plus the run
+        of single-child ancestors below it and single-child descendants above
+        it. ``levels[i] = (n_children, level)`` over all *active* codes."""
+        lo = idx
+        while lo > 0:
+            pn, pl = levels[lo - 1]
+            cn, cl = levels[lo]
+            if pn == 1 and pl == cl - 1:
+                lo -= 1
+            else:
+                break
+        hi = idx
+        while hi + 1 < n_active:
+            pn, pl = levels[hi]
+            cn, cl = levels[hi + 1]
+            if pn == 1 and cl == pl + 1:
+                hi += 1
+            else:
+                break
+        return list(range(lo, hi + 1))
+
+    def apply_apriori(self, cmd: "Apriory") -> Dict[str, int]:
+        """Apply an apriori file to a computed table.
+
+        Port of Java ``APriori.processAprioryFile`` (APriori.java:701). Each
+        line names a cell by its code values and a change type:
+
+        - ``S``/``U``/``P``/``M``/``ML`` -> set the cell status
+        - ``C``/``W`` <cost>             -> set the cell cost
+        - ``PL`` <lpl> <upl>             -> set the protection levels
+          (only for primary-unsafe cells, 3..9)
+        - ``AB`` <l> <u>                 -> not implemented (legacy either)
+
+        With ``expand_bogus`` the change is applied to the whole bogus range
+        (single-child chain) of each named code, matching the legacy
+        ``expandBogus`` flag. Returns a count summary dict.
+        """
+        from .batch import Apriory  # local to avoid a top-level cycle
+
+        if not self._metadata:
+            raise BatchError("No metadata.")
+        tab = cmd.tab_no - 1
+        if tab < 0 or tab >= len(self._tables):
+            raise BatchError(f"Table {cmd.tab_no} out of range.")
+        spec, _srs = self._tables[tab]
+        meta = self._metadata
+        tau = self._tau
+        sep = cmd.separator
+
+        exp_vars = [meta.index_of(n) for n in spec.exp_vars]
+        n_exp = len(exp_vars)
+        if n_exp == 0:
+            raise BatchError("Table has no exposure variables for apriori.")
+
+        # Per-exp-var: active code strings, (n_children, level) of active
+        # codes, and a code-string -> active-index lookup. Java trims both the
+        # input code and the codelist entry before comparing; for
+        # non-hierarchical vars it left-pads to ``var_len``. We index on both
+        # the raw and trimmed/padded forms so any of them resolves.
+        code_str: List[List[str]] = []
+        levels: List[List[Tuple[int, int]]] = []
+        code_index: List[Dict[str, int]] = []
+        max_dim: List[int] = []
+        for vi in exp_vars:
+            n_codes, n_active = tau.get_var_number_of_codes(vi)
+            max_dim.append(n_active)
+            var = meta.variables[vi]
+            arr: List[str] = []
+            lv: List[Tuple[int, int]] = []
+            idx: Dict[str, int] = {}
+            for ci in range(n_active):
+                ok2, _ctype, cs, _m2, _l2 = tau.get_var_code(vi, ci)
+                if not ok2:
+                    continue
+                cs = cs or ""
+                # Level/n_children only for the bogus range; GetVarCodeProperties
+                # can fail on non-hierarchical vars, so fall back to (0, 0).
+                pok, _p, _a, _m, lev, nch, _pcs = \
+                    tau.get_var_code_properties(vi, ci)
+                if not pok:
+                    lev, nch = 0, 0
+                arr.append(cs)
+                lv.append((nch, lev))
+                pos = len(arr) - 1
+                # Index on raw, trimmed, and (non-hierarchical) padded forms.
+                for cand in (cs, cs.strip(), var.normalise_code(cs.strip())):
+                    if cand and cand not in idx:
+                        idx[cand] = pos
+            code_str.append(arr)
+            levels.append(lv)
+            code_index.append(idx)
+
+        # Counters mirroring Java aPrioryStatus[5][2] (row, [ok, error]).
+        #   0 line read, 1 status, 2 cost, 3 bounds, 4 protection level
+        stats: Dict[str, int] = {
+            "lines_read": 0, "lines_error": 0,
+            "status_ok": 0, "status_err": 0,
+            "cost_ok": 0, "cost_err": 0,
+            "bounds_ok": 0, "bounds_err": 0,
+            "protlevel_ok": 0, "protlevel_err": 0,
+        }
+
+        apriory_status_map = {
+            "S": CS_SAFE_MANUAL, "U": CS_UNSAFE_MANUAL,
+            "P": CS_PROTECT_MANUAL, "M": CS_SECONDARY_UNSAFE_MANUAL,
+            "ML": CS_SECONDARY_UNSAFE,
+        }
+
+        apri_path = self._resolve_arb_path(cmd.file)
+        with open(apri_path, "r", encoding="utf-8", errors="replace") as fh:
+            lines = fh.read().splitlines()
+
+        first_line = True
+        for line in lines:
+            if not line.strip():
+                continue
+            parts = line.split(sep)
+
+            # --- first line: validate separator + field count ---------------
+            # Java ``NumberOfVarsInAprioryFile``: the apriori row is
+            # ``<code1>;...;<codeN>;<cmd> [;<v1> [;<v2>]]``. The *command*
+            # token is the last non-numeric field, so the number of code
+            # fields is (n_fields - 1). The first line is validated but also
+            # applied as a normal data row (there is no separate header).
+            if first_line:
+                if sep not in line:
+                    raise BatchError(
+                        f"separator ({sep!r}) not found in file {apri_path}")
+                n_fields = len(parts) - 1  # last field is the command
+                try:
+                    float(parts[-1])
+                    n_fields -= 1  # a numeric tail means a value, not a code
+                except ValueError:
+                    pass
+                if n_fields != n_exp:
+                    raise BatchError(
+                        f"Apriori file contains {n_fields} fields, but the "
+                        f"table has {n_exp}.")
+                first_line = False
+
+            # --- part 1: read the codes -> dimIndex -------------------------
+            # Java: a total/blank code maps to the parent (dim 0); otherwise
+            # the (trimmed) code is matched against the active codelist.
+            base_dim: List[int] = []
+            ok = True
+            for i in range(n_exp):
+                var = meta.variables[exp_vars[i]]
+                if i >= len(parts):
+                    ok = False
+                    base_dim.append(0)
+                    continue
+                raw = parts[i].strip()
+                if raw == "" or var.is_total_code(raw):
+                    base_dim.append(0)
+                    continue
+                ci = None
+                for cand in (raw, var.normalise_code(raw)):
+                    if cand in code_index[i]:
+                        ci = code_index[i][cand]
+                        break
+                if ci is None:
+                    stats["lines_error"] += 1
+                    if not cmd.ignore_error:
+                        raise BatchError(
+                            f"Apriori code {i + 1} '{raw}' not found in "
+                            f"variable {var.name}.")
+                    ok = False
+                    base_dim.append(0)
+                else:
+                    base_dim.append(ci)
+            if ok:
+                stats["lines_read"] += 1
+            if not ok:
+                continue  # legacy: skip this line
+
+            # --- part 2: the apriory change ---------------------------------
+            if n_exp >= len(parts):
+                # no change-type token present
+                stats["lines_error"] += 1
+                continue
+            ap_type = parts[n_exp].strip().upper()
+            rest = parts[n_exp + 1:]
+            x1 = x2 = 0.0
+            new_status = 0
+
+            if ap_type in apriory_status_map:
+                new_status = apriory_status_map[ap_type]
+            elif ap_type in ("C", "W"):
+                new_status = _AP_ADJUST_COST
+                if rest:
+                    x1 = float(rest[0])
+            elif ap_type == "AB":
+                raise BatchError(
+                    "Apriori bounds (AB) are not implemented (nor in legacy).")
+            elif ap_type == "PL":
+                new_status = _AP_ADJUST_PROT_LEVEL
+                if len(rest) >= 2:
+                    x1, x2 = float(rest[0]), float(rest[1])
+            else:
+                stats["lines_error"] += 1
+                if not cmd.ignore_error:
+                    raise BatchError(
+                        f"Illegal apriori command {ap_type!r} in file "
+                        f"{apri_path}.")
+                continue
+
+            # --- expand to bogus ranges and apply over the Cartesian product
+            ranges: List[List[int]] = []
+            for i in range(n_exp):
+                if cmd.expand_bogus and levels[i]:
+                    ranges.append(self._bogus_range(
+                        exp_vars[i], base_dim[i], max_dim[i], levels[i]))
+                else:
+                    ranges.append([base_dim[i]])
+
+            for dim in itertools.product(*ranges):
+                self._apply_apriori_change(
+                    tab, dim, ap_type, x1, x2, new_status, tau, stats)
+
+        logger.info(
+            "Apriori: table %d — %d lines read, %d status, %d cost, "
+            "%d prot-level changes applied.",
+            cmd.tab_no, stats["lines_read"], stats["status_ok"],
+            stats["cost_ok"], stats["protlevel_ok"])
+        return stats
+
+    def _apply_apriori_change(self, tab: int, dim: Tuple[int, ...],
+                               ap_type: str, x1: float, x2: float,
+                               new_status: int, tau,
+                               stats: Dict[str, int]) -> None:
+        """Apply a single apriori change to one cell (APriori.ProcessOneVarCode)."""
+        try:
+            res = tau.get_table_cell(tab, list(dim), 0)
+        except Exception:
+            return
+        if not res or not res[0]:
+            return
+        old_status = res[10]
+        if old_status in (CS_EMPTY, CS_EMPTY_NONSTRUCT):
+            return  # "met status EMPTY mag niks gebeuren"
+
+        if ap_type in ("C", "W"):  # change cost
+            cost = x1 if x1 > 0 else 1.0
+            if tau.set_table_cell_cost(tab, list(dim), cost):
+                stats["cost_ok"] += 1
+            else:
+                stats["cost_err"] += 1
+            return
+
+        if ap_type == _AP_ADJUST_PROT_LEVEL or ap_type == "PL":
+            if x1 < 0 or x2 < 0:
+                stats["protlevel_err"] += 1
+                return
+            if not (CS_UNSAFE_RULE <= old_status <= CS_UNSAFE_MANUAL):
+                stats["protlevel_err"] += 1
+                return
+            # Apply to the primary-unsafe cell's protection levels (dim-based).
+            ok = tau.set_protection_levels_dim(tab, list(dim), x1, x2)
+            stats["protlevel_ok" if ok else "protlevel_err"] += 1
+            return
+
+        if ap_type in ("S", "U", "P", "M", "ML"):  # status change
+            # PROTECTED -> UNSAFE is disallowed by the native setter; also
+            # mirror the M/ML -> SECONDARY_UNSAFE_MANUAL mapping from Java.
+            if (new_status == CS_SECONDARY_UNSAFE
+                    and old_status == CS_SAFE_MANUAL):
+                new_status = CS_SECONDARY_UNSAFE_MANUAL
+            if tau.set_table_cell_status_dim(tab, list(dim), new_status):
+                stats["status_ok"] += 1
+            else:
+                stats["status_err"] += 1
+            return
+
     # -- batch execution ------------------------------------------------------
     def run_batch(self, arb_path: Union[str, Path]) -> None:
         """Parse and execute a legacy .arb batch file."""
@@ -1769,8 +2053,12 @@ class Engine:
             logger.info("Cleared state.")
         elif isinstance(cmd, Solver):
             logger.info("Solver %s: all backends use HiGHS (license ignored).", cmd.name)
-        elif isinstance(cmd, (Apriory, Cover)):
-            logger.warning("%s not yet implemented.", type(cmd).__name__)
+        elif isinstance(cmd, Apriory):
+            self.apply_apriori(cmd)
+        elif isinstance(cmd, Cover):
+            logger.warning(
+                "COVER (protect cover table) not yet implemented; "
+                "see docs/ui-design.md / Task 3 for scoping.")
 
     def _resolve_arb_path(self, filename: str) -> str:
         """Resolve a file path relative to the .arb file's directory."""
