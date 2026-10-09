@@ -6,23 +6,37 @@ publication.
 
 ## What it does
 
-When a statistics agency publishes a table (population, income, employment,
-...), small cell counts can reveal who is who — if only 2 people in a region
-fall into an income band, their records are effectively identifiable. SDC
-prevents that before publication:
+τ-ARGUS applies **statistical disclosure control (SDC) to tabular data**.
+It reduces the risk that published tables disclose information about
+individual respondents, businesses, or holdings — it is the tabular
+counterpart to [μ-ARGUS](https://github.com/INSEE/Argus), which protects
+microdata.
 
-- **Suppression** — hide the cells that would give too much away, without
-  making the table useless.
-- **Controlled rounding** — round cells to a base (e.g. 5 or 10) so no
-  individual value is identifiable, while keeping row and column totals
-  consistent.
-- **Auditing** — check that the published table cannot be reversed to
-  recover the original data.
+A cell in a published table can be sensitive because too few respondents
+contribute to it, a few contributors dominate, a competitor can estimate
+another contribution, or a confidentiality requirement applies. Simply
+deleting the value is often not enough: published totals, subtotals, and
+bounds can reveal a deleted value or constrain it to a narrow interval.
 
-τ-ARGUS runs this whole pipeline from a declarative `.arb` batch file:
-load microdata → compute tables → suppress or round → audit → save. This
-rewrite is a **drop-in replacement for legacy τ-ARGUS 4.1**: same batch
-files, same file I/O, same output.
+τ-ARGUS runs the whole protection pipeline from a declarative `.arb` batch
+file:
+
+```text
+input data + metadata
+  -> define table dimensions and response
+  -> define sensitivity rules and protection requirements
+  -> construct or read the table
+  -> identify primary sensitive cells
+  -> choose a protection method
+     -> secondary suppression -> audit
+     -> controlled rounding
+  -> write release table + report
+```
+
+A useful table balances confidentiality and retained information; it is not
+necessarily the most detailed original table with every sensitive value
+suppressed. This rewrite is a **drop-in replacement for legacy τ-ARGUS 4.1**:
+same batch files, same file I/O, same output.
 
 ## How it works
 
