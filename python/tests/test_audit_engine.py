@@ -25,8 +25,8 @@ from pathlib import Path
 
 import pytest
 
-from tauargus.batch import Apriory, Suppress
-from tauargus.engine import (
+from pytauargus.batch import Apriory, Suppress
+from pytauargus.engine import (
     CS_EMPTY_NONSTRUCT,
     CS_SAFE,
     CS_SAFE_MANUAL,
@@ -89,7 +89,7 @@ def _cell_info(engine, tab):
 def _run_cli(argv):
     """Run the CLI in a fresh subprocess (clean native solver state)."""
     code = (
-        "from tauargus.cli import main;"
+        "from pytauargus.cli import main;"
         f"import json,sys;sys.exit(main(json.loads({json.dumps(argv)!r})) or 0)"
     )
     env = dict(os.environ, PYTHONPATH=str(SRC) + os.pathsep
@@ -290,7 +290,7 @@ def test_writetable_ar_option(tmp_path):
     arb = _build_arb_with_suppress_ar(tmp_path)
     code = (
         "import json\n"
-        "from tauargus.engine import run_batch\n"
+        "from pytauargus.engine import run_batch\n"
         f"eng = run_batch({str(arb)!r})\n"
         "tab = 0\n"
         "spec, srs = eng._tables[tab]\n"

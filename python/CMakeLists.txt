@@ -42,8 +42,8 @@ target_link_libraries(_tauargus PRIVATE
 )
 
 # Output the extension straight into the python package dir so that a plain
-# `import tauargus._tauargus` works both in dev and inside the wheel.
-set(PKG_DIR ${CMAKE_SOURCE_DIR}/src/tauargus)
+# `import pytauargus._tauargus` works both in dev and inside the wheel.
+set(PKG_DIR ${CMAKE_SOURCE_DIR}/src/pytauargus)
 set_target_properties(_tauargus PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY ${PKG_DIR}
     LIBRARY_OUTPUT_DIRECTORY_RELEASE ${PKG_DIR}
@@ -58,4 +58,14 @@ add_custom_command(TARGET _tauargus POST_BUILD
         ${NATIVE_LIB_DIR}/libtauargus_rounder.dylib
         ${NATIVE_LIB_DIR}/libtauargus_csp.dylib
         ${PKG_DIR}
+)
+
+# Install into the wheel so `import pytauargus` works from an installed wheel
+# (scikit-build-core runs `cmake --install` into the wheel staging dir).
+install(TARGETS _tauargus LIBRARY DESTINATION pytauargus)
+install(FILES
+    ${NATIVE_LIB_DIR}/libtauargus_hitas.dylib
+    ${NATIVE_LIB_DIR}/libtauargus_rounder.dylib
+    ${NATIVE_LIB_DIR}/libtauargus_csp.dylib
+    DESTINATION pytauargus
 )

@@ -17,8 +17,8 @@ from pathlib import Path
 
 import pytest
 
-from tauargus.batch import Cover, parse_batch
-from tauargus.engine import BatchError, Engine, run_batch
+from pytauargus.batch import Cover, parse_batch
+from pytauargus.engine import BatchError, Engine, run_batch
 
 DATA = Path(__file__).resolve().parent.parent.parent / "data" / "tableinput"
 
@@ -76,7 +76,7 @@ def parse_batch_from_string(text: str):
     """Parse .arb text directly (helper for unit tests)."""
     import tempfile
 
-    from tauargus.batch import parse_batch as _pb
+    from pytauargus.batch import parse_batch as _pb
 
     with tempfile.NamedTemporaryFile("w", suffix=".arb", delete=False) as fh:
         fh.write(text)
@@ -107,7 +107,7 @@ class TestCoverSolveContract:
 
     def test_clear_resets_cover_flag(self, cover_fixtures):
         e = run_batch(cover_fixtures / "cover.arb")
-        from tauargus.batch import Clear
+        from pytauargus.batch import Clear
 
         e._execute(Clear())
         assert e._protect_cover_table is False

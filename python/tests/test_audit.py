@@ -71,7 +71,7 @@ def _write_jj(tmp_path: Path, content: str) -> str:
 class TestNativeAudit:
     def test_manual_example_intervals(self, tmp_path):
         """Manual section 2.15 example: X11 in [3,6] and companions."""
-        from tauargus._tauargus import audit_jj
+        from pytauargus._tauargus import audit_jj
 
         jj = _write_jj(tmp_path, MANUAL_EXAMPLE_JJ)
         rows = audit_jj(jj)
@@ -100,7 +100,7 @@ class TestNativeAudit:
         - X21 (cell 7) value 0, [0,3]:  (3-0)=3, width 3  -> safe
         - X22 (cell 8) value 3, [0,3]:  (3-3)=0 < 1       -> unsafe
         """
-        from tauargus._tauargus import audit_jj
+        from pytauargus._tauargus import audit_jj
 
         jj = _write_jj(tmp_path, MANUAL_EXAMPLE_JJ)
         rows = audit_jj(jj)
@@ -122,7 +122,7 @@ class TestNativeAudit:
 1
 0 3 : 0 (-1) 1 (1) 2 (1)
 """
-        from tauargus._tauargus import audit_jj
+        from pytauargus._tauargus import audit_jj
 
         jj = _write_jj(tmp_path, jj_text)
         rows = audit_jj(jj)

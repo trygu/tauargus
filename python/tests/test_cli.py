@@ -1,4 +1,4 @@
-"""Tests for the headless command line interface (:mod:`tauargus.cli`).
+"""Tests for the headless command line interface (:mod:`pytauargus.cli`).
 
 The native engine is fragile when many solvers are created in a single process
 (the HiGHS LP teardown can segfault — see ``test_suppress.py``). So every CLI
@@ -13,7 +13,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from tauargus.cli import main
+from pytauargus.cli import main
 
 DATA = Path(__file__).resolve().parent.parent.parent / "data"
 ARB = DATA / "TestRecode.arb"
@@ -23,7 +23,7 @@ SRC = Path(__file__).resolve().parent.parent / "src"
 
 
 def _run_cli(argv):
-    """Run ``tauargus.cli.main(argv)`` in a fresh subprocess; return the proc.
+    """Run ``pytauargus.cli.main(argv)`` in a fresh subprocess; return the proc.
 
     A separate process gives the native engine a clean solver/thread state,
     which is required because several solvers in one process can crash. The
@@ -31,7 +31,7 @@ def _run_cli(argv):
     it is not installed in the venv for the test run.
     """
     code = (
-        "from tauargus.cli import main;"
+        "from pytauargus.cli import main;"
         f"import json,sys;sys.exit(main(json.loads({json.dumps(argv)!r})) or 0)"
     )
     env = dict(os.environ, PYTHONPATH=str(SRC) + os.pathsep + os.environ.get("PYTHONPATH", ""))
@@ -147,7 +147,7 @@ def test_suppress_dispatch(monkeypatch):
     bug — see ``test_suppress.py``), so the solver is stubbed here to test the
     CLI's dispatch deterministically.
     """
-    import tauargus.cli as cli
+    import pytauargus.cli as cli
 
     captured = {}
 
@@ -169,7 +169,7 @@ def test_suppress_dispatch(monkeypatch):
 
 
 def test_suppress_bad_table_number(monkeypatch):
-    import tauargus.cli as cli
+    import pytauargus.cli as cli
 
     class StubEngine:
         _n_tables = 2
@@ -180,7 +180,7 @@ def test_suppress_bad_table_number(monkeypatch):
 
 def test_round_dispatch(monkeypatch):
     """``round`` should dispatch RND to ``Engine.suppress`` with a base."""
-    import tauargus.cli as cli
+    import pytauargus.cli as cli
 
     class StubEngine:
         _n_tables = 2

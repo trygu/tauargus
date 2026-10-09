@@ -1,7 +1,7 @@
 """Pytest bootstrap: make the `src/` package importable without a wheel build.
 
 The native extension (``_tauargus``) is built into ``src/tauargus/`` by
-``cmake --build``; putting ``src`` on ``sys.path`` lets ``import tauargus``
+``cmake --build``; putting ``src`` on ``sys.path`` lets ``import pytauargus``
 find both the Python sources and the compiled module.
 """
 
@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from tauargus.engine import Engine, run_batch
+from pytauargus.engine import Engine, run_batch
 
 SRC = Path(__file__).resolve().parent.parent / "src"
 DATA = Path(__file__).resolve().parent.parent.parent / "data"

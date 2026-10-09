@@ -1,7 +1,7 @@
 """Headless Tau-Argus command line interface.
 
 This is the product entry point that replaces the legacy Java/Swing front-end.
-It drives the native C++ engine (``tauargus.engine.Engine``) from the command
+It drives the native C++ engine (``pytauargus.engine.Engine``) from the command
 line, so a ``.arb`` batch — or an ad-hoc table specification — can be run
 end-to-end with no GUI.
 

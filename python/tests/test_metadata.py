@@ -8,7 +8,7 @@ metadata files, matching ``Metadata.readMicroMetadata`` /
 
 from pathlib import Path
 
-from tauargus.engine import parse_rda, parse_rda_table
+from pytauargus.engine import parse_rda, parse_rda_table
 
 DATA = Path(__file__).resolve().parent.parent.parent / "data"
 

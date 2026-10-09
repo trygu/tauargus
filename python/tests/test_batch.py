@@ -6,7 +6,7 @@ batch files, matching the grammar in ``src/tauargus/model/batch.java``.
 
 import pytest
 
-from tauargus.batch import (
+from pytauargus.batch import (
     BatchError,
     OpenMicrodata,
     OpenTableData,
@@ -130,7 +130,7 @@ class TestSafetyRuleGrammar:
 
     def _parse_rule(self, line: str):
         import tempfile, os
-        from tauargus.batch import Tokenizer
+        from pytauargus.batch import Tokenizer
         # Build a minimal batch with a single table + one safety-rule line.
         body = (
             '<OPENMICRODATA> "x.asc"\n'

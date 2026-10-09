@@ -1,4 +1,4 @@
-# τ-ARGUS — native rewrite (open-source solvers, headless CLI)
+# tauargus-engine — τ-ARGUS native rewrite (open-source solvers, headless CLI)
 
 A ground-up port of the legacy τ-ARGUS statistical-disclosure-control (SDC)
 product. The original Java/Swing front-end and the commercial CPLEX / XPRESS /
@@ -28,9 +28,10 @@ Five C/C++ git submodules under `native/`, all built with CMake:
 | `crp`    | Controlled rounding problem (iterative rounding + auditing) | HiGHS (MIP) |
 | `rounder`| Thin dispatch layer over `crp` | via `crp` (HiGHS) |
 
-A **Python layer** (`python/`) wraps the native engine with pybind11 and
-exposes the `tauargus` command-line tool. The native build is consumed by the
-Python build via **scikit-build-core**.
+A **Python layer** (`python/`) wraps the native engine with pybind11. The
+package is **`pytauargus`** (import name), which exposes the **`tauargus`**
+command-line tool. The native build is consumed by the Python build via
+**scikit-build-core**.
 
 ```
 .arb batch  →  tauargus CLI  →  Engine (python)  →  native core/csp/hitas/crp/rounder  →  HiGHS
@@ -74,7 +75,7 @@ uv run tauargus --help
 To install the `tauargus` command from a fresh wheel:
 
 ```bash
-uv tool install --force --from dist/tauargus-*.whl tauargus
+uv tool install --force --reinstall dist/pytauargus-*.whl
 ```
 
 > For fast in-tree iteration on the C++ bindings, configure the extension
@@ -103,12 +104,40 @@ cd python
 uv run pytest        # 99 tests: native contracts + engine + CLI
 ```
 
-## Layout
+## Project layout
 
-- `native/` — the five C/C++ engine submodules
-- `python/` — pybind11 bindings + the `tauargus` package + tests
-- `data/` — sample `.arb` batches and tabular fixtures
-- `src/` — legacy Java/Swing front-end, kept read-only pending deletion
+```
+.
+├── native/                 # C/C++ engine — 5 git submodules, CMake superbuild
+│   ├── CMakeLists.txt      #   superbuild: configures & builds all five
+│   ├── core/               #   data model, Argus/JJ I/O, SDC engine (static lib)
+│   ├── csp/                #   cell-suppression LP + intervall audit (HiGHS LP)
+│   ├── hitas/              #   hierarchical suppression (links csp)
+│   ├── crp/                #   controlled-rounding MIP (HiGHS MIP)
+│   └── rounder/            #   thin dispatch layer over crp
+│
+├── python/                 # Python layer — pybind11 bindings + `pytauargus`
+│   ├── CMakeLists.txt      #   builds the `_tauargus` extension into src/pytauargus/
+│   ├── pyproject.toml      #   package metadata + `tauargus` console script
+│   ├── cpp/                #   bindings: bind_core/csp/hitas/rounder + module.cpp
+│   ├── src/pytauargus/     #   the Python package (engine.py, cli.py, batch.py)
+│   │   └── _tauargus.*.so  #   compiled extension + bundled libtauargus_*.dylibs
+│   └── tests/              #   pytest suite (99 tests)
+│
+├── data/                   # sample `.arb` batches + tabular fixtures
+├── reference/              # read-only reference implementations
+│   ├── intervale/          #   legacy intervall.exe audit (Pascal/FPC)
+│   └── rtauargus/          #   R package wrapping the legacy binary — its docs
+│                           #   and example data are used to cross-check our port
+├── docs/                   # legacy τ-ARGUS 4.1 manual bundle + design notes
+└── src/                    # legacy Java/Swing front-end (read-only, pending deletion)
+```
+
+`reference/rtauargus` is a third-party R package that wraps the original
+τ-ARGUS binary. We don't build against it, but its **documentation and
+example data** are a useful independent oracle while the port is still being
+verified — handy for confirming our output matches the reference
+implementation before the legacy code is fully retired.
 
 ## License
 

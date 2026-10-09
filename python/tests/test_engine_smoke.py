@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from tauargus.engine import Engine, run_batch
+from pytauargus.engine import Engine, run_batch
 
 DATA = Path(__file__).resolve().parent.parent.parent / "data"
 

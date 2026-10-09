@@ -3,7 +3,7 @@ requires = ["scikit-build-core>=0.10", "pybind11>=2.13"]
 build-backend = "scikit_build_core.build"
 
 [project]
-name = "tauargus"
+name = "pytauargus"
 version = "0.1.0"
 description = "Tau-Argus: Statistical Disclosure Control, open-source solvers (HiGHS) + Python CLI"
 requires-python = ">=3.9"
@@ -14,9 +14,9 @@ dependencies = []
 test = ["pytest"]
 
 [project.scripts]
-tauargus = "tauargus.cli:main"
+tauargus = "pytauargus.cli:main"
 
 [tool.scikit-build]
 cmake.version = ">=3.16"
 build-dir = "build/{wheel_tag}"
-wheel.packages = ["src/tauargus"]
+wheel.packages = ["src/pytauargus"]

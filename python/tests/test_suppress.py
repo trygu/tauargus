@@ -22,8 +22,8 @@ from pathlib import Path
 
 import pytest
 
-from tauargus.batch import Suppress
-from tauargus.engine import run_batch
+from pytauargus.batch import Suppress
+from pytauargus.engine import run_batch
 
 DATA = Path(__file__).resolve().parent.parent.parent / "data"
 

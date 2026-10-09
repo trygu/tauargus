@@ -45,7 +45,7 @@ def _run_batch_probe(arb: Path, tmp_path: Path, n_tables: int):
     """Run the batch once; return per-table (ncells, n_exp, topn) as JSON."""
     code = (
         "import json\n"
-        "from tauargus.engine import run_batch\n"
+        "from pytauargus.engine import run_batch\n"
         f"eng = run_batch({str(arb)!r})\n"
         "out = []\n"
         "for i in range(eng._n_tables):\n"
@@ -95,7 +95,7 @@ def test_csv_still_works(tmp_path):
     """Microdata CSV output is unchanged (no regression from the port)."""
     out = tmp_path / "micro.csv"
     code = (
-        "from tauargus.engine import run_batch, IDENTITY_DIM_SEQUENCE\n"
+        "from pytauargus.engine import run_batch, IDENTITY_DIM_SEQUENCE\n"
         f"eng = run_batch({str(ARB)!r})\n"
         f"eng._tau.write_csv(0, {str(out)!r}, True, IDENTITY_DIM_SEQUENCE, 1)\n"
         "print('ok')\n"

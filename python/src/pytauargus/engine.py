@@ -1,7 +1,7 @@
 """High-level Tau-Argus engine driving the native C++ bindings.
 
 Usage:
-    from tauargus.engine import Engine, parse_rda, run_batch
+    from pytauargus.engine import Engine, parse_rda, run_batch
     eng = Engine()
     eng.run_batch("data/TestRecode.arb")
 
