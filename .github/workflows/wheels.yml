@@ -243,6 +243,16 @@ jobs:
           HIGHS_BIN="$(cygpath -w "$RUNNER_TEMP/highs-prefix/bin")"
           delvewheel repair --add-path "$ENGINE_BIN;$HIGHS_BIN" -w repaired wheelhouse/*.whl
 
+      - name: Smoke test wheel in a clean venv
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/smoke"
+          "$RUNNER_TEMP/smoke/Scripts/python.exe" -m pip install repaired/*.whl
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/smoke/Scripts/tauargus.exe" --version
+          "$RUNNER_TEMP/smoke/Scripts/python.exe" -c "import pytauargus, pytauargus._tauargus as m; print('ok', m.__file__)"
+
       - name: Upload wheel
         uses: actions/upload-artifact@v4
         with:
