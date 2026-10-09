@@ -18,7 +18,16 @@ Port SDC tool to HiGHS solver, portable cloud-native build, and headless Python 
   4. When an in-flight task is verified.
 - **State format:** Keep `PROGRESS.md` strictly under 35 lines. Completed items are moved to `ARCHIVE.md` immediately.
 
-## 3. Architecture & Boundaries
+## 3. Source of Truth for Legacy Behavior (READ FIRST)
+- **`docs/tau-argus-4.1-markdown-bundle/`** — the legacy τ-ARGUS 4.1 manual (PDF + 10.8k-line
+  agent reference + 77 figure assets). This is the **source of truth** for legacy behavior:
+  file formats, `.arb` batch grammar, parameters, and SDC mathematics. The rewrite must be a
+  **drop-in replacement** for legacy τ-ARGUS: match its observable behavior, file I/O, and outputs.
+  Part I (agent reference) is task-oriented; Part II is the page-by-page transcription.
+- **`reference/intervalle/`** — the legacy `intervalle.exe` audit program (Pascal/FPC submodule).
+  Reference implementation for the audit (intervals) + synthetic values; target of the native port.
+
+## 4. Architecture & Boundaries
 - Native C/C++ engine: 5 git submodules under `native/`:
   `core` (static), `csp` (HiGHS LP), `hitas` (links csp), `crp` (HiGHS MIP), `rounder` (links crp).
   Build/commit INSIDE each submodule first, then bump pointers in the parent repo.
@@ -26,7 +35,7 @@ Port SDC tool to HiGHS solver, portable cloud-native build, and headless Python 
 - Python layer: `python/` (pybind11 bindings + `tauargus` package). Target product is headless `.arb` batch CLI.
 - Legacy to ignore: `src/tauargus/` (Java frontend to be deleted in Task 8). Do NOT inspect or edit.
 
-## 4. Build Commands (macOS / Apple Silicon)
+## 5. Build Commands (macOS / Apple Silicon)
 - Highs Brew prefix: `-DHighs_DIR=$(brew --prefix)/lib/cmake/Highs`
 - Submodule build:
   `cmake -S native/<mod> -B native/<mod>/build -DHighs_DIR=$(brew --prefix)/lib/cmake/Highs && cmake --build native/<mod>/build`
@@ -36,7 +45,7 @@ Port SDC tool to HiGHS solver, portable cloud-native build, and headless Python 
   `cmake -S native -B native/build-asan -DHighs_DIR=$(brew --prefix)/lib/cmake/Highs -DCMAKE_C_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g" -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g" && cmake --build native/build-asan`
   (Preload runtime for Python: `DYLD_INSERT_LIBRARIES="$(clang -print-file-name=libclang_rt.asan_osx_dynamic.dylib)" uv run ...`)
 
-## 5. Verification & Commits
+## 6. Verification & Commits
 - **TDD:** The agent is an avid TDD fan. For every feature/port, write the test
   *first* (it encodes the legacy contract), watch it fail for the right reason,
   then implement until green. A feature is not done until its test passes.
