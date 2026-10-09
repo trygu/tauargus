@@ -21,7 +21,13 @@ Goal: HiGHS solvers, portable cloud-native build, headless Python CLI replacing 
 - [x] **Root cleanup** (2026-10-09): legacy Java-era files + `nbproject/`
   + `reference/intervalle` submodule removed; `src/` Java kept (Task 8).
 
+- [x] **rtauargus reference submodule** (2026-10-10) added at `references/rtauargus`
+  (InseeFrLab, v1.3.6) to steal tests + test data. Inspected: it is a *generator*
+  front-end (writes .tab/.rda/.hrc/.arb), opposite side of our *parser+engine*.
+
 ## Next (priority order)
+0. Port rtauargus tests into our suite (HRC writer, micro .rda writer, arb text)
+   + bring in test data; document gaps (no .tab/.hst generator, no hrc parser).
 1. Validate Linux/Windows legs of wheels.yml in CI; publish first release.
 2. Task 1: document solver strategy (legacy roles → HiGHS); Dockerfile.
 3. **ANSI-UI (SPLIT OUT, `docs/ui-design.md`)**: TUI vs headless-CLI-only (rec: headless).
