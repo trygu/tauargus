@@ -135,11 +135,15 @@ def _compute_from_arb(arb: Path) -> Engine:
     return eng
 
 
-def _default_csv_name(eng: Engine, i: int) -> Path:
+def _default_out_name(eng: Engine, i: int, suffix: str) -> Path:
     stem = "table"
     if eng._metadata and eng._metadata.data_file:
         stem = Path(eng._metadata.data_file).stem
-    return eng._work_dir / f"{stem}_table{i + 1}.csv"
+    return eng._work_dir / f"{stem}_table{i + 1}{suffix}"
+
+
+def _default_csv_name(eng: Engine, i: int) -> Path:
+    return _default_out_name(eng, i, ".csv")
 
 
 # ===========================================================================
@@ -255,18 +259,21 @@ def cmd_save(args) -> int:
     arb = Path(args.batch)
     eng = run_batch(arb)
     out = Path(args.out) if args.out else None
+    default_suffix = ".tab" if args.format == "intermediate" else ".csv"
     for i in range(eng._n_tables):
         if out is not None and eng._n_tables > 1:
             fpath = out.with_name(f"{out.stem}_{i + 1}{out.suffix}")
         elif out is not None:
             fpath = out
-        else:  # default: <data_stem>_table<n>.csv next to the data file
-            fpath = _default_csv_name(eng, i)
+        else:  # default: <data_stem>_table<n>.{csv|tab} next to the data file
+            fpath = _default_out_name(eng, i, default_suffix)
         if args.format == "csv":
             eng._tau.write_csv(i, str(fpath), True, IDENTITY_DIM_SEQUENCE, 1)
         elif args.format == "cell":
             eng._tau.write_cell_records(
                 i, str(fpath), False, args.status, False, "", args.unsafe, True, 1)
+        elif args.format == "intermediate":
+            eng.write_intermediate_table(i, str(fpath))
         else:
             print(f"error: unknown format {args.format}", file=sys.stderr)
             return 2
@@ -349,7 +356,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("save", help="compute, then write tables to file")
     sp.add_argument("batch")
-    sp.add_argument("--format", choices=["csv", "cell"], default="csv")
+    sp.add_argument("--format", choices=["csv", "cell", "intermediate"], default="csv")
     sp.add_argument("--out", help="output file (one per table if multiple)")
     sp.add_argument("--status", action="store_true",
                     help="include the cell status column (cell format)")

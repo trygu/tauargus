@@ -75,6 +75,30 @@ _ERR_CELLALREADYFILLED = 1022
 _ERR_CODEDOESNOTEXIST = 1027
 
 
+def _status_symbol(status: int) -> str:
+    """Intermediate-format status symbol (Java ``CellStatus``/``Category``).
+
+    ``isEmpty`` (13/14) -> ``E``; else the category symbol: 1,2 -> ``S``;
+    3-9 -> ``U``; 10 -> ``P``; 11,12 -> ``M``; anything else -> ``?``.
+    """
+    if status in (CS_EMPTY_NONSTRUCT, CS_EMPTY):
+        return "E"
+    if status in (CS_SAFE, CS_SAFE_MANUAL):
+        return "S"
+    if 3 <= status <= 9:
+        return "U"
+    if status == CS_PROTECT_MANUAL:
+        return "P"
+    if status in (CS_SECONDARY_UNSAFE, CS_SECONDARY_UNSAFE_MANUAL):
+        return "M"
+    return "?"
+
+
+# ``CS_EMPTY_NONSTRUCT`` / ``CS_SECONDARY_UNSAFE_MANUAL`` (see defines.h).
+CS_EMPTY_NONSTRUCT = 13
+CS_SECONDARY_UNSAFE_MANUAL = 12
+
+
 # ===========================================================================
 # Variable dataclass (parsed from .rda)
 # ===========================================================================
@@ -636,6 +660,7 @@ class Engine:
         self._safety_rules_buf: List[List[SafetyRule]] = []
         self._n_tables: int = 0
         self._work_dir: Path = Path.cwd()
+        self._rounded_tables: set = set()  # indices of tables marked rounded (RND)
 
     # -- property accessors --------------------------------------------------
     @property
@@ -1396,6 +1421,7 @@ class Engine:
             if result > 0:
                 raise BatchError(f"DoRound failed (result {result}, err {err})")
             self._tau.set_rounded_response(jj_out, tab)
+            self._rounded_tables.add(tab)
             logger.info("RND suppress: table %d rounded (max_jump=%.4f, %d steps).",
                         tab + 1, max_jump, n_jump)
 
@@ -1514,6 +1540,148 @@ class Engine:
         logger.info("Recode: %d tree nodes closed.", closed)
 
     # -- write ----------------------------------------------------------------
+    @staticmethod
+    def _top_n_needed(srs: "SafetyRuleSet", holding: bool) -> int:
+        """Java ``numberOfTopNNeeded`` / ``numberOfHoldingTopNNeeded``."""
+        topn = 0
+        lo, hi = (2, 4) if holding else (0, 2)
+        for i in range(lo, hi):
+            if srs.dom_rule and i < len(srs.dom_n):
+                topn = max(topn, srs.dom_n[i])
+            if srs.pq_rule and i < len(srs.pq_n) and srs.pq_n[i] != 0:
+                topn = max(topn, srs.pq_n[i] + 1)
+        return topn
+
+    def write_intermediate_table(self, tab: int, path: str,
+                                  simple: bool = False,
+                                  holding: bool = False,
+                                  suppress_empty: bool = False) -> None:
+        """Write the legacy WRITETABLE type-5 (INTERMEDIATE) audit file.
+
+        Row-major walk over active codes; port of ``TableSet.write``
+        (TableSet.java:1281-1419) minus the ``+AR`` audit-interval columns
+        (which require the external ``intervalle.exe``).
+        """
+        if not self._metadata:
+            raise BatchError("No metadata.")
+        if tab < 0 or tab >= len(self._tables):
+            raise BatchError(f"Table {tab + 1} out of range.")
+        spec, srs = self._tables[tab]
+        meta = self._metadata
+        tau = self._tau
+
+        exp_names = spec.exp_vars
+        exp_vars = [meta.index_of(n) for n in exp_names]
+        n_exp = len(exp_vars)
+
+        resp_var = meta.variables[meta.index_of(spec.resp_var)]
+        n_dec = resp_var.n_decimals
+        is_freq = resp_var.type == "FREQUENCY"
+        rounded = tab in self._rounded_tables
+
+        topn = 0 if simple else self._top_n_needed(srs, holding)
+
+        # Per-dim active-code counts (== native SizeDim after recode).
+        max_dim = []
+        for vi in exp_vars:
+            n_codes, n_active = tau.get_var_number_of_codes(vi)
+            max_dim.append(n_active)
+
+        # Pre-compute code strings for each (var, code_idx) to avoid repeated
+        # native calls inside the inner loop.
+        code_strings: List[List[str]] = []
+        for vi, md in zip(exp_vars, max_dim):
+            var = meta.variables[vi]
+            arr: List[str] = []
+            for ci in range(md):
+                ok, _ctype, cs, _missing, _level = tau.get_var_code(vi, ci)
+                if not ok or cs == "":
+                    cs = var.tot_code if var.tot_code else "Total"
+                arr.append('"' + cs + '"')
+            code_strings.append(arr)
+
+        total_cells = 1
+        for md in max_dim:
+            total_cells *= md
+
+        with open(path, "w", encoding="utf-8") as f:
+            dim_array = [0] * n_exp
+            done = False
+            while not done:
+                status = 0
+                if n_exp == 0:
+                    ok_cell = False
+                    resp = rresp = cta = ckm = shadow = cost = 0.0
+                    key = key_nz = 0.0
+                    freq = 0
+                    ms_list: List[float] = []
+                    msw_list: List[float] = []
+                    holding_freq = 0
+                    hms_list: List[float] = []
+                    hnr_list: List[int] = []
+                    peep_cell = peep_holding = 0.0
+                    lower = upper = rlower = rupper = 0.0
+                else:
+                    result = tau.get_table_cell(tab, dim_array, topn)
+                    if len(result) < 3:
+                        # Out-of-range dim; skip (should not happen)
+                        resp = rresp = cta = ckm = shadow = cost = 0.0
+                        key = key_nz = 0.0
+                        freq = 0
+                        status = CS_EMPTY
+                        ms_list = [0.0] * topn
+                        msw_list = [0.0] * topn
+                        holding_freq = 0
+                        hms_list = [0.0] * topn
+                        hnr_list = [0] * topn
+                        peep_cell = peep_holding = 0.0
+                        lower = upper = rlower = rupper = 0.0
+                    else:
+                        (ok_cell, resp, rresp, cta, ckm, shadow, cost,
+                         key, key_nz, freq, status,
+                         ms_list, msw_list,
+                         holding_freq, hms_list, hnr_list,
+                         peep_cell, peep_holding,
+                         lower, upper, rlower, rupper) = result
+
+                skip = (status == CS_EMPTY and suppress_empty)
+                if not skip:
+                    parts: List[str] = []
+                    for j in range(n_exp):
+                        parts.append(code_strings[j][dim_array[j]])
+                    rv = rresp if rounded else resp
+                    parts.append(f"{rv:.{n_dec}f}")
+                    if not is_freq:
+                        parts.append(str(holding_freq if holding else freq))
+                        if not simple:
+                            parts.append(f"{shadow:.{n_dec}f}")
+                    parts.append(f"{cost:.{n_dec}f}")
+                    if not simple:
+                        if holding:
+                            for j in range(topn):
+                                v = hms_list[j] if j < len(hms_list) else 0.0
+                                parts.append(f"{v:.{n_dec}f}")
+                        else:
+                            for j in range(topn):
+                                v = ms_list[j] if j < len(ms_list) else 0.0
+                                parts.append(f"{v:.{n_dec}f}")
+                    parts.append(_status_symbol(status))
+                    parts.append(f"{lower:.{n_dec}f}")
+                    parts.append(f"{upper:.{n_dec}f}")
+                    f.write(";".join(parts) + "\n")
+
+                # advance dim_array (odometer, rightmost = last var)
+                k = n_exp - 1
+                while k >= 0:
+                    dim_array[k] += 1
+                    if dim_array[k] < max_dim[k]:
+                        break
+                    else:
+                        dim_array[k] = 0
+                        k -= 1
+                if k == -1:
+                    done = True
+
     def write_table(self, cmd: WriteTable) -> None:
         """Write a table to file."""
         tab = cmd.tab_no - 1
@@ -1521,7 +1689,16 @@ class Engine:
 
         if cmd.output_type == 1:  # CSV
             self._tau.write_csv(tab, str(fpath), True, IDENTITY_DIM_SEQUENCE, 1)
-        elif cmd.output_type in (2, 3, 4, 5, 6, 7):
+        elif cmd.output_type == 5:  # INTERMEDIATE (audit table)
+            opts = set(cmd.options)
+            simple = "+SO" in opts
+            holding = "+HI" in opts
+            suppress_empty = "+SE" in opts
+            self.write_intermediate_table(tab, str(fpath),
+                                          simple=simple,
+                                          holding=holding,
+                                          suppress_empty=suppress_empty)
+        elif cmd.output_type in (2, 3, 4, 6, 7):
             # CellRecords (SBS, code value, etc.)
             self._tau.write_cell_records(tab, str(fpath), True, False,
                                          False, "", False, True, 1)
@@ -1540,6 +1717,7 @@ class Engine:
         # Reset state
         self._tables = []
         self._safety_rules_buf = []
+        self._rounded_tables = set()
 
         for cmd in commands:
             self._execute(cmd)
@@ -1587,6 +1765,7 @@ class Engine:
             self._tables = []
             self._safety_rules_buf = []
             self._metadata = None
+            self._rounded_tables = set()
             logger.info("Cleared state.")
         elif isinstance(cmd, Solver):
             logger.info("Solver %s: all backends use HiGHS (license ignored).", cmd.name)

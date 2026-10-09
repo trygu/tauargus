@@ -15,5 +15,6 @@
 *.sta
 CSPlogfile.txt
 python/build/
+python/build-make/
 python/dist/
 native/build/

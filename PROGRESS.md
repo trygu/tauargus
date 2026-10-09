@@ -6,7 +6,13 @@ Branch: `rewrite`. History/completed work: see `ARCHIVE.md`.
 Port Tau-Argus to HiGHS open-source solvers with a portable cloud-native build and a headless Python CLI replacing the Java/Swing frontend.
 
 ## Verified checkpoints
-- [x] 74/74 tests green (`cd python && uv run pytest`); `uv build --wheel` OK.
+- [x] 76/76 tests green (`cd python && uv run pytest`); `uv build --wheel` OK.
+- [x] **WRITETABLE type-5 (INTERMEDIATE) audit file** ported to Python
+  (`Engine.write_intermediate_table`). New `get_table_cell` pybind binding;
+  `+SO`/`+HI`/`+SE` options; CLI `save --format intermediate`. `+AR`
+  realized-interval columns deferred (needs external `intervalle.exe`).
+  Note: legacy batch number is `safeFileFormat+1` → intermediate is **5**
+  (4=SBS), matching the plan's 0-based Java constant `FILE_FORMAT_INTERMEDIATE=4`.
 - [x] MOD/OPT/RND suppression ported end-to-end (HITAS/CRP/HiGHS).
 - [x] **Task 4: headless CLI** — `tauargus/cli.py` (run/explore/specify/compute/
   suppress/round/audit/save/tables/version); entry point `tau-argus`.
@@ -19,11 +25,13 @@ Port Tau-Argus to HiGHS open-source solvers with a portable cloud-native build a
   → `parse_rda_table`. 7 new tests in `python/tests/test_table_smoke.py`.
 
 ## Next
-1. Task 5 finish: `.jjd` audit output; confirm microdata flow unchanged.
+1. Task 5 finish: only `+AR` realized-interval columns remain (deferred —
+   needs external `intervalle.exe`). INTERMEDIATE audit output + CSV flow done.
 2. Task 1 finish: document solver strategy; Dockerfile / cibuildwheel plan.
-3. Task 3 finish: `apriori.py` / `recode` / `save` as needed by batch flow.
+3. Task 3 finish: implement `apriori` / `cover` (recode already done+tested).
 4. Task 6: packaging — Dockerfile, GitHub Actions CI.
-5. Task 8: delete `src/` (Java), `nbproject/`, SWIG; final grep sweep.
+5. Task 8 (BLOCKED): keep `src/` (Java) / `nbproject/` / SWIG until an
+   ANSI-based UI replaces the Swing frontend. No deletion until then.
 
 ## Watch items
 - `deleterows`/`deleterow` (cspsolve.c) compact `rind` before `JJdelsetrows` —

@@ -194,11 +194,36 @@ void init_core(py::module_ &m) {
             return s;
         }, py::arg("tab"), py::arg("cell"))
         .def("get_table_cell_protection_levels", [](TauArgus &t, long tab,
-                                                    long cell) {
+                                                     long cell) {
             double l = 0, u = 0;
             t.GetTableCellProtectionLevels(tab, cell, &l, &u);
             return py::make_tuple(l, u);
         }, py::arg("tab"), py::arg("cell"))
+        .def("get_table_cell", [](TauArgus &t, long tab,
+                                  const std::vector<long> &dim_index,
+                                  long topn) -> py::tuple {
+            std::vector<long> d = dim_index;
+            int n = (int)d.size();
+            int msz = (int)(topn > 0 ? topn : 1);
+            double resp = 0, rresp = 0, cta = 0, ckm = 0, shadow = 0, cost = 0;
+            double key = 0, key_nz = 0, peep_cell = 0, peep_holding = 0;
+            double lower = 0, upper = 0, rlower = 0, rupper = 0;
+            long freq = 0, status = 0, holding_freq = 0;
+            std::vector<double> ms(msz, 0.0), msw(msz, 0.0), hms(msz, 0.0);
+            std::vector<long> hnr(msz, 0);
+            long peep_sort_cell = 0, peep_sort_holding = 0;
+            bool ok = n > 0 && t.GetTableCell(
+                    tab, d.data(), &resp, &rresp, &cta, &ckm, &shadow, &cost,
+                    &key, &key_nz, &freq, &status, ms.data(), msw.data(),
+                    &holding_freq, hms.data(), hnr.data(), &peep_cell,
+                    &peep_holding, &peep_sort_cell, &peep_sort_holding, &lower,
+                    &upper, &rlower, &rupper);
+            if (!ok) return py::make_tuple(false);
+            return py::make_tuple(true, resp, rresp, cta, ckm, shadow, cost,
+                                   key, key_nz, freq, status, ms, msw,
+                                   holding_freq, hms, hnr, peep_cell,
+                                   peep_holding, lower, upper, rlower, rupper);
+        }, py::arg("tab"), py::arg("dim_index"), py::arg("topn") = 0)
         .def("get_total_table_size", [](TauArgus &t, long tab) {
             long ncell = 0, size = 0;
             t.GetTotalTabelSize(tab, &ncell, &size);
@@ -223,6 +248,12 @@ void init_core(py::module_ &m) {
         .def("set_table_cell_protection_levels",
              &TauArgus::SetTableCellProtectionLevels, py::arg("tab"), py::arg("cell"),
              py::arg("lpl"), py::arg("upl"))
+        .def("set_protection_levels_dim", [](TauArgus &t, long tab,
+                                             const std::vector<long> &dim,
+                                             double lpl, double upl) {
+            std::vector<long> d = dim;
+            return t.SetProtectionLevelsForResponseTable(tab, d.data(), lpl, upl);
+        }, py::arg("tab"), py::arg("dim_index"), py::arg("lpl"), py::arg("upl"))
         .def("set_all_empty_non_structural", &TauArgus::SetAllEmptyNonStructural,
              py::arg("tab"))
 
