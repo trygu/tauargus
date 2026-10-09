@@ -176,3 +176,28 @@ the CSP/HiGHS teardown checkpoint in PROGRESS.md / `docs/native-debugging.md`.)
   Verified: isolated venv `tauargus round ... --tab 1` runs CRP/HiGHS, exit 0.
 - Gate: superbuild rebuilds clean at `engine/`; 99/99 tests green; self-contained
   wheel (`_tauargus` + csp/hitas/rounder/CRP dylibs) verified in isolated venv.
+
+## Self-contained wheels + cross-platform CI (2026-10-09)
+- **Problem:** the engine dylibs linked HiGHS at its absolute install path
+  (`/opt/homebrew/opt/highs/lib/libhighs.1.dylib` on macOS), so a wheel only
+  worked where HiGHS happened to live there.
+- **Fix (macOS, verified):** `delocate-wheel` (console script, not `-m`)
+  bundles HiGHS into `pytauargus/.dylibs/` and rewrites refs to
+  `@loader_path/.dylibs/...`. Verified: repaired wheel installed in an
+  isolated venv runs `tauargus round` (exit 0, HiGHS bundled).
+- **Platform-aware binding CMake** (`bindings/python/CMakeLists.txt`): resolves
+  engine lib names per OS (`.dylib`/`.a` macOS, `.so`/`.a` Linux, `.lib`+`.dll`
+  Windows) and sets the right BUILD/INSTALL rpath. Previously hardcoded
+  `.dylib` — macOS-only.
+- **`wheels.yml`** (GitHub Actions, manual matrix — not cibuildwheel, which
+  can't see the sibling `engine/` the Python CMake links against):
+  - jobs: macos-14/arm64 + macos-13/x86_64, manylinux2014 (container), windows-2022;
+    CPython 3.10–3.13.
+  - each: HiGHS from source (`HIGHS_TAG`, cached) → engine superbuild (cached) →
+    `pip wheel bindings/python --no-deps` → repair (delocate/auditwheel/delvewheel)
+    → upload artifact.
+  - release job (on `v*` tag): download artifacts → **GitHub Release assets**
+    (softprops/action-gh-release) → optional PyPI publish (`vars.PYPI_ENABLED`).
+- **Known gaps (need a real CI run):** Linux auditwheel `--exclude` for libstdc++
+  and the manylinux CPython path; Windows delvewheel HiGHS DLL discovery. The
+  macOS leg is fully proven locally.

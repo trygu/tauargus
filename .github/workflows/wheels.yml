@@ -1,0 +1,284 @@
+# Build self-contained cross-platform wheels for pytauargus and publish
+# them as GitHub Release assets (and, on tag, optionally to PyPI).
+#
+# Why a manual matrix instead of cibuildwheel: the Python build links
+# against a pre-built engine in the sibling `engine/` dir
+# (bindings/python/CMakeLists.txt -> ../../engine/build/lib). cibuildwheel
+# copies only the package dir into its container and would not see engine/.
+#
+# Each build job:
+#   1. builds HiGHS from source (version-pinned, cached),
+#   2. builds the tauargus engine superbuild (cached),
+#   3. builds the pytauargus wheel for one CPython via `pip wheel`,
+#   4. repairs the wheel so HiGHS + engine libs are bundled
+#      (delocate / auditwheel / delvewheel) -> self-contained wheel,
+#   5. uploads it as an artifact.
+#
+# The release job (on tag) aggregates the artifacts into a GitHub Release
+# and, if a PyPI token is configured, publishes there too.
+#
+# Status: macOS legs verified locally (wheel runs `tauargus round` from an
+# isolated venv with no system HiGHS). Linux/Windows legs must be validated
+# by a CI run.
+
+name: wheels
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: wheels-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  HIGHS_TAG: v1.15.1
+
+# ---------------------------------------------------------------------------
+# Shared build recipe, inlined per job (GitHub Actions has no job-level
+# function inclusion). Keep the three copies in sync.
+# ---------------------------------------------------------------------------
+
+jobs:
+  build-macos:
+    name: macos-${{ matrix.os == 'macos-14' && 'arm64' || 'x86_64' }} py${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-13]
+        python: ["3.10", "3.11", "3.12", "3.13"]
+        exclude:
+          - os: macos-13
+            python: "3.10"
+          - os: macos-13
+            python: "3.11"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Build HiGHS from source (cached)
+        id: highs
+        shell: bash
+        run: |
+          set -euo pipefail
+          PREFIX="$RUNNER_TEMP/highs-prefix"
+          if [ -f "$PREFIX/.done" ]; then
+            echo "prefix=$PREFIX" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git clone --depth 1 --branch "$HIGHS_TAG" \
+            https://github.com/ERGO-Code/HiGHS.git highs
+          cmake -S highs -B highs/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF \
+            -DCMAKE_INSTALL_PREFIX="$PREFIX"
+          cmake --build highs/build -j
+          cmake --install highs/build
+          touch "$PREFIX/.done"
+          echo "prefix=$PREFIX" >> "$GITHUB_OUTPUT"
+
+      - name: Build engine superbuild (cached)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f "engine/build/.done" ]; then
+            echo "engine already built"
+            exit 0
+          fi
+          cmake -S engine -B engine/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DHighs_DIR="${{ steps.highs.outputs.prefix }}/lib/cmake/Highs"
+          cmake --build engine/build -j
+          touch engine/build/.done
+
+      - name: Build wheel
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install "scikit-build-core>=0.10" "pybind11>=2.13"
+          python -m pip wheel bindings/python --no-deps -w wheelhouse
+
+      - name: Repair wheel (bundle HiGHS + engine libs)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install delocate
+          delocate-listdeps wheelhouse/*.whl || true
+          delocate-wheel -w repaired wheelhouse/*.whl
+
+      - name: Upload wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytauargus-macos-${{ matrix.os == 'macos-14' && 'arm64' || 'x86_64' }}-py${{ matrix.python }}
+          path: repaired/*.whl
+          if-no-files-found: error
+
+  build-linux:
+    name: manylinux2014 py${{ matrix.python }}
+    runs-on: ubuntu-24.04
+    container:
+      image: quay.io/pypa/manylinux2014_x86_64:latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["cp310-cp310", "cp311-cp311", "cp312-cp312", "cp313-cp313"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Toolchain (cmake/ninja/auditwheel)
+        run: /opt/python/${{ matrix.python }}/bin/pip install cmake ninja "auditwheel>=6" "scikit-build-core>=0.10" "pybind11>=2.13"
+
+      - name: Build HiGHS from source
+        id: highs
+        run: |
+          set -euo pipefail
+          PREFIX="$GITHUB_WORKSPACE/highs-prefix"
+          git clone --depth 1 --branch "$HIGHS_TAG" \
+            https://github.com/ERGO-Code/HiGHS.git highs
+          cmake -S highs -B highs/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF \
+            -DCMAKE_INSTALL_PREFIX="$PREFIX" \
+            -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
+          cmake --build highs/build -j
+          cmake --install highs/build
+          echo "prefix=$PREFIX" >> "$GITHUB_OUTPUT"
+
+      - name: Build engine superbuild
+        run: |
+          set -euo pipefail
+          cmake -S engine -B engine/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DHighs_DIR="${{ steps.highs.outputs.prefix }}/lib/cmake/Highs"
+          cmake --build engine/build -j
+
+      - name: Build wheel
+        run: |
+          set -euo pipefail
+          /opt/python/${{ matrix.python }}/bin/pip wheel \
+            bindings/python --no-deps -w wheelhouse
+
+      - name: Repair wheel (bundle HiGHS + engine libs)
+        run: |
+          set -euo pipefail
+          auditwheel repair wheelhouse/*.whl -w repaired \
+            -l /opt/_conDA/conda/lib/libstdc++.so.6
+
+      - name: Upload wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytauargus-manylinux-py${{ matrix.python }}
+          path: repaired/*.whl
+          if-no-files-found: error
+
+  build-windows:
+    name: windows py${{ matrix.python }}
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Build HiGHS from source (cached)
+        id: highs
+        shell: bash
+        run: |
+          set -euo pipefail
+          PREFIX="$RUNNER_TEMP/highs-prefix"
+          if [ -f "$PREFIX/.done" ]; then
+            echo "prefix=$PREFIX" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git clone --depth 1 --branch "$HIGHS_TAG" \
+            https://github.com/ERGO-Code/HiGHS.git highs
+          cmake -S highs -B highs/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF \
+            -DCMAKE_INSTALL_PREFIX="$PREFIX"
+          cmake --build highs/build -j
+          cmake --install highs/build
+          touch "$PREFIX/.done"
+          echo "prefix=$PREFIX" >> "$GITHUB_OUTPUT"
+
+      - name: Build engine superbuild (cached)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f "engine/build/.done" ]; then
+            echo "engine already built"
+            exit 0
+          fi
+          cmake -S engine -B engine/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DHighs_DIR="${{ steps.highs.outputs.prefix }}/lib/cmake/Highs"
+          cmake --build engine/build -j
+          touch engine/build/.done
+
+      - name: Build wheel
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install "scikit-build-core>=0.10" "pybind11>=2.13"
+          python -m pip wheel bindings/python --no-deps -w wheelhouse
+
+      - name: Repair wheel (bundle HiGHS + engine DLLs)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install delvewheel
+          delvewheel repair -w repaired wheelhouse/*.whl
+
+      - name: Upload wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytauargus-windows-py${{ matrix.python }}
+          path: repaired/*.whl
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: [build-macos, build-linux, build-windows]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Show wheels
+        run: ls -la dist
+
+      # Downloadable wheels on the GitHub Release page.
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.whl
+          generate_release_notes: true
+
+      # Optional PyPI publish (trusted publishing or token).
+      - name: Publish to PyPI
+        if: ${{ vars.PYPI_ENABLED == 'true' }}
+        uses: pypa/gh-action-pypi-publish@release/v1

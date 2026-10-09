@@ -6,24 +6,25 @@ Goal: HiGHS solvers, portable cloud-native build, headless Python CLI replacing 
 ## Verified checkpoints (details in ARCHIVE.md)
 - [x] 99/99 tests green (`cd bindings/python && uv run pytest`); wheel OK.
 - [x] WRITETABLE type-5 (INTERMEDIATE) + apriori + MOD/OPT/RND + tabular flow.
-- [x] Task 4: headless CLI (run/explore/specify/compute/suppress/round/apriori/audit/save/tables/version).
-- [x] CSP/HiGHS teardown segfault fixed; Task 3 `cover` (4 tests).
-- [x] **Audit (Intervalle) ported to native `csp`** — `TauAuditJj` (HiGHS);
-  pybind `audit_jj`; contract tests incl. manual §2.15 (X11 → [3,6]).
-- [x] **Audit wired into engine + CLI**: `Engine.audit`, `cmd_audit`,
-  `+AR`/`AR+` type-5 realized-bounds columns, `--audit` on `save`.
+- [x] Task 4 headless CLI; CSP/HiGHS teardown segfault fixed; Task 3 `cover`.
+- [x] **Audit (Intervalle) ported** — `TauAuditJj` (HiGHS), `Engine.audit`,
+  `cmd_audit`, `+AR`/`AR+` type-5 bounds columns, `--audit` on `save`.
 - [x] **Cleanup** (2026-10-09): legacy cruft removed from all 5 engine repos;
-  legacy `doc/` removed; READMEs rewritten; CLI `tau-argus` → `tauargus`.
-- [x] **pytauargus rename** (`7a6ff3d`): Python package `tauargus`→`pytauargus`
-  (CLI stays `tauargus`); wheel self-contained via CMake `install()` rules.
-- [x] **engine/+bindings/ restructure** (2026-10-09): `native/`→`engine/native/`,
-  superbuild → `engine/CMakeLists.txt`, `python/`→`bindings/python/`. 5 submodule
-  SHAs preserved. **CRP bundling fixed**: wheel now ships `libCRP.dylib`
-  (rounder links it) — `round` verified working from an isolated venv.
+  READMEs rewritten; CLI `tau-argus` → `tauargus`.
+- [x] **pytauargus rename** (`7a6ff3d`): package `tauargus`→`pytauargus`
+  (CLI stays `tauargus`); wheel self-contained via CMake `install()`.
+- [x] **engine/+bindings/ restructure**: `native/`→`engine/native/`,
+  superbuild → `engine/CMakeLists.txt`, `python/`→`bindings/python/`;
+  `libCRP.dylib` bundled (rounder links it).
+- [x] **Self-contained wheel + cross-platform CI** (2026-10-09):
+  platform-aware binding CMake (dylib/so/dll); `wheels.yml` builds HiGHS
+  from source + engine + `pip wheel` + delocate/auditwheel/delvewheel
+  repair → GitHub Release assets (+ optional PyPI on tag). macOS leg
+  verified end-to-end; Linux/Windows pending a CI run.
 
 ## Next (priority order)
-1. Task 1: document solver strategy (legacy roles → HiGHS); Dockerfile/cibuildwheel.
-2. Task 6: packaging — Dockerfile, GitHub Actions CI.
+1. Validate Linux/Windows legs of wheels.yml in CI; publish first release.
+2. Task 1: document solver strategy (legacy roles → HiGHS); Dockerfile.
 3. **ANSI-UI (SPLIT OUT, `docs/ui-design.md`)**: TUI vs headless-CLI-only (rec: headless).
 4. Task 8 (BLOCKED on #3): keep `src/` Java + parent-root legacy until UI decision.
 
