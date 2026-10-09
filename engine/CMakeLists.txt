@@ -10,9 +10,9 @@
 # All solver backends converge on the open-source HiGHS. Configure with the
 # HiGHS CMake package path, e.g. on macOS Homebrew:
 #
-#   cmake -S native -B native/build \
+#   cmake -S engine -B engine/build \
 #         -DHighs_DIR=$(brew --prefix)/lib/cmake/Highs
-#   cmake --build native/build -j
+#   cmake --build engine/build -j
 
 cmake_minimum_required(VERSION 3.16)
 project(tauargus_native C CXX)
@@ -39,8 +39,8 @@ if(NOT DEFINED Highs_DIR AND CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     endif()
 endif()
 
-add_subdirectory(core)
-add_subdirectory(csp)
-add_subdirectory(hitas)
-add_subdirectory(crp)
-add_subdirectory(rounder)
+add_subdirectory(native/core)
+add_subdirectory(native/csp)
+add_subdirectory(native/hitas)
+add_subdirectory(native/crp)
+add_subdirectory(native/rounder)

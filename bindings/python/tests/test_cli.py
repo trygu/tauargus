@@ -15,7 +15,7 @@ from pathlib import Path
 
 from pytauargus.cli import main
 
-DATA = Path(__file__).resolve().parent.parent.parent / "data"
+DATA = Path(__file__).resolve().parent.parent.parent.parent / "data"
 ARB = DATA / "TestRecode.arb"
 ASC = DATA / "tau_testW.asc"
 RDA = DATA / "tau_testW.rda"

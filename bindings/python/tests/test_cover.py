@@ -20,7 +20,7 @@ import pytest
 from pytauargus.batch import Cover, parse_batch
 from pytauargus.engine import BatchError, Engine, run_batch
 
-DATA = Path(__file__).resolve().parent.parent.parent / "data" / "tableinput"
+DATA = Path(__file__).resolve().parent.parent.parent.parent / "data" / "tableinput"
 
 
 def _make_fixtures(tmp_path: Path) -> Path:

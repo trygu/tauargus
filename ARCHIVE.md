@@ -153,3 +153,26 @@ build + `uv` CLI usage, tests. (Parent-root legacy files — `Makefile`,
 
 (The older "OPEN BUG: HiGHS teardown segfault" note above is RESOLVED — see
 the CSP/HiGHS teardown checkpoint in PROGRESS.md / `docs/native-debugging.md`.)
+
+## pytauargus rename + engine//bindings/ restructure (2026-10-09)
+- **`pytauargus` rename** (commit `7a6ff3d`): Python package `tauargus`→`pytauargus`
+  (CLI command stays `tauargus`). Project identity = `tauargus-engine`. Only the
+  Python layer renamed — C libraries keep `tauargus` names (`libtauargus_*`,
+  `_tauargus` ext, `TauArgus`/`HiTaSCtrl`/`RounderCtrl` classes, `tauargus_native`).
+  Wheel made self-contained via CMake `install()` (ext + csp/hitas/rounder dylibs).
+- **Directory restructure**: `native/`→`engine/native/` (submodules, SHAs preserved
+  via `.git/modules/` intact), superbuild moved to `engine/CMakeLists.txt`
+  (`add_subdirectory(native/...)`), `python/`→`bindings/python/`. Updated `.gitmodules`
+  paths, `bindings/python/CMakeLists.txt` `NATIVE_*`, test `DATA` paths (4 parents),
+  `.gitignore`, `AGENTS.md`, `README.md` (layout tree).
+- **Consolidation rejected**: a single `libtauargus_engine` is blocked by the
+  **two global-namespace `IProgressListener` classes** (`core`: `UpdateProgress`;
+  `hitas`: 7 methods). Both `TauArgus.h` and `HiTaSCtrl.h` include it; the per-module
+  include-path trick (csp takes hitas's via PRIVATE include) is what makes separate
+  libs work. Keeping 5 separate libs + per-binding TU isolation (current model).
+- **CRP wheel fix**: `libtauargus_rounder.dylib` links `@rpath/libCRP.dylib`, but the
+  wheel previously bundled only csp/hitas/rounder → `tauargus round` would dyld-fail
+  from an installed wheel. Now `libCRP.dylib` is copied (POST_BUILD) + `install(FILES)`.
+  Verified: isolated venv `tauargus round ... --tab 1` runs CRP/HiGHS, exit 0.
+- Gate: superbuild rebuilds clean at `engine/`; 99/99 tests green; self-contained
+  wheel (`_tauargus` + csp/hitas/rounder/CRP dylibs) verified in isolated venv.

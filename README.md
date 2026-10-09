@@ -18,7 +18,7 @@ file I/O, and outputs of legacy τ-ARGUS 4.1.
 
 ## Architecture
 
-Five C/C++ git submodules under `native/`, all built with CMake:
+Five C/C++ git submodules under `engine/native/`, all built with CMake:
 
 | Module | Role | Solver backend |
 |--------|------|----------------|
@@ -28,8 +28,8 @@ Five C/C++ git submodules under `native/`, all built with CMake:
 | `crp`    | Controlled rounding problem (iterative rounding + auditing) | HiGHS (MIP) |
 | `rounder`| Thin dispatch layer over `crp` | via `crp` (HiGHS) |
 
-A **Python layer** (`python/`) wraps the native engine with pybind11. The
-package is **`pytauargus`** (import name), which exposes the **`tauargus`**
+A **Python layer** (`bindings/python/`) wraps the native engine with pybind11.
+The package is **`pytauargus`** (import name), which exposes the **`tauargus`**
 command-line tool. The native build is consumed by the Python build via
 **scikit-build-core**.
 
@@ -51,16 +51,16 @@ command-line tool. The native build is consumed by the Python build via
 Build the native engine (all five submodules) via the superbuild:
 
 ```bash
-cmake -S native -B native/build \
+cmake -S engine -B engine/build \
       -DHighs_DIR=$(brew --prefix)/lib/cmake/Highs
-cmake --build native/build -j
+cmake --build engine/build -j
 ```
 
 Build the Python package (scikit-build-core drives the native CMake build
 and links the five engines, then compiles the pybind11 module):
 
 ```bash
-cd python
+cd bindings/python
 uv sync
 uv build --wheel
 ```
@@ -68,7 +68,7 @@ uv build --wheel
 Run the CLI directly from the source tree without installing:
 
 ```bash
-cd python
+cd bindings/python
 uv run tauargus --help
 ```
 
@@ -79,8 +79,8 @@ uv tool install --force --reinstall dist/pytauargus-*.whl
 ```
 
 > For fast in-tree iteration on the C++ bindings, configure the extension
-> against `python/CMakeLists.txt` in a local `build-make/` dir and point
-> `-Dpybind11_DIR` at the venv. See `python/CMakeLists.txt` and `AGENTS.md`.
+> against `bindings/python/CMakeLists.txt` in a local `build-make/` dir and
+> point `-Dpybind11_DIR` at the venv. See `bindings/python/CMakeLists.txt`.
 
 ## Using the CLI
 
@@ -100,7 +100,7 @@ Example fixtures live in `data/` (e.g. `data/tableinput/`).
 ## Testing
 
 ```bash
-cd python
+cd bindings/python
 uv run pytest        # 99 tests: native contracts + engine + CLI
 ```
 
@@ -108,21 +108,23 @@ uv run pytest        # 99 tests: native contracts + engine + CLI
 
 ```
 .
-├── native/                 # C/C++ engine — 5 git submodules, CMake superbuild
-│   ├── CMakeLists.txt      #   superbuild: configures & builds all five
-│   ├── core/               #   data model, Argus/JJ I/O, SDC engine (static lib)
-│   ├── csp/                #   cell-suppression LP + intervall audit (HiGHS LP)
-│   ├── hitas/              #   hierarchical suppression (links csp)
-│   ├── crp/                #   controlled-rounding MIP (HiGHS MIP)
-│   └── rounder/            #   thin dispatch layer over crp
+├── engine/                 # C/C++ engine — language-agnostic core
+│   ├── CMakeLists.txt      #   superbuild: configures & builds all five submodules
+│   └── native/             #   the 5 git submodules
+│       ├── core/           #     data model, Argus/JJ I/O, SDC engine (static lib)
+│       ├── csp/            #     cell-suppression LP + intervall audit (HiGHS LP)
+│       ├── hitas/          #     hierarchical suppression (links csp)
+│       ├── crp/            #     controlled-rounding MIP (HiGHS MIP)
+│       └── rounder/        #     thin dispatch layer over crp
 │
-├── python/                 # Python layer — pybind11 bindings + `pytauargus`
-│   ├── CMakeLists.txt      #   builds the `_tauargus` extension into src/pytauargus/
-│   ├── pyproject.toml      #   package metadata + `tauargus` console script
-│   ├── cpp/                #   bindings: bind_core/csp/hitas/rounder + module.cpp
-│   ├── src/pytauargus/     #   the Python package (engine.py, cli.py, batch.py)
-│   │   └── _tauargus.*.so  #   compiled extension + bundled libtauargus_*.dylibs
-│   └── tests/              #   pytest suite (99 tests)
+├── bindings/               # per-language front-ends (Python now, R planned)
+│   └── python/             #   pybind11 bindings + `pytauargus` package
+│       ├── CMakeLists.txt  #     builds the `_tauargus` extension into src/pytauargus/
+│       ├── pyproject.toml  #     package metadata + `tauargus` console script
+│       ├── cpp/            #     bindings: bind_core/csp/hitas/rounder + module.cpp
+│       ├── src/pytauargus/ #     the Python package (engine.py, cli.py, batch.py)
+│       │   └── _tauargus.*.so  #   compiled extension + bundled libtauargus_*.dylibs
+│       └── tests/          #     pytest suite (99 tests)
 │
 ├── data/                   # sample `.arb` batches + tabular fixtures
 ├── reference/              # read-only reference implementations

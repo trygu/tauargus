@@ -10,7 +10,7 @@ from pathlib import Path
 
 from pytauargus.engine import parse_rda, parse_rda_table
 
-DATA = Path(__file__).resolve().parent.parent.parent / "data"
+DATA = Path(__file__).resolve().parent.parent.parent.parent / "data"
 
 
 class TestMicroMetadata:

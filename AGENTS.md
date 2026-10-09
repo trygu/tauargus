@@ -28,29 +28,33 @@ Port SDC tool to HiGHS solver, portable cloud-native build, and headless Python 
   Reference implementation for the audit (intervals) + synthetic values; target of the native port.
 
 ## 4. Architecture & Boundaries
-- Native C/C++ engine: 5 git submodules under `native/`:
+- Layout: `engine/` (C/C++ core) + `bindings/` (per-language front-ends).
+  The engine is language-agnostic; each binding links the five engine libs.
+- Native C/C++ engine: 5 git submodules under `engine/native/`:
   `core` (static), `csp` (HiGHS LP), `hitas` (links csp), `crp` (HiGHS MIP), `rounder` (links crp).
+  Superbuild at `engine/CMakeLists.txt`.
   Build/commit INSIDE each submodule first, then bump pointers in the parent repo.
 - Solver backend: Pure HiGHS (`<highs/interfaces/highs_c_api.h>`). No CPLEX, XPRESS, or legacy SCIP.
-- Python layer: `python/` (pybind11 bindings + `tauargus` package). Target product is headless `.arb` batch CLI.
+- Python layer: `bindings/python/` (pybind11 bindings + `pytauargus` package, `tauargus` CLI).
+  Target product is headless `.arb` batch CLI. A future R binding lives under `bindings/r/`.
 - Legacy to ignore: `src/tauargus/` (Java frontend to be deleted in Task 8). Do NOT inspect or edit.
 
 ## 5. Build Commands (macOS / Apple Silicon)
 - Highs Brew prefix: `-DHighs_DIR=$(brew --prefix)/lib/cmake/Highs`
 - Submodule build:
-  `cmake -S native/<mod> -B native/<mod>/build -DHighs_DIR=$(brew --prefix)/lib/cmake/Highs && cmake --build native/<mod>/build`
+  `cmake -S engine/native/<mod> -B engine/native/<mod>/build -DHighs_DIR=$(brew --prefix)/lib/cmake/Highs && cmake --build engine/native/<mod>/build`
 - Superbuild (all 5):
-  `cmake -S native -B native/build -DHighs_DIR=$(brew --prefix)/lib/cmake/Highs && cmake --build native/build`
+  `cmake -S engine -B engine/build -DHighs_DIR=$(brew --prefix)/lib/cmake/Highs && cmake --build engine/build`
 - ASan build (native debugging) — use separate dir to preserve release build:
-  `cmake -S native -B native/build-asan -DHighs_DIR=$(brew --prefix)/lib/cmake/Highs -DCMAKE_C_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g" -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g" && cmake --build native/build-asan`
+  `cmake -S engine -B engine/build-asan -DHighs_DIR=$(brew --prefix)/lib/cmake/Highs -DCMAKE_C_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g" -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g" && cmake --build engine/build-asan`
   (Preload runtime for Python: `DYLD_INSERT_LIBRARIES="$(clang -print-file-name=libclang_rt.asan_osx_dynamic.dylib)" uv run ...`)
 
 ## 6. Verification & Commits
 - **TDD:** The agent is an avid TDD fan. For every feature/port, write the test
   *first* (it encodes the legacy contract), watch it fail for the right reason,
   then implement until green. A feature is not done until its test passes.
-- Verification: `cd python && uv run pytest` | `uv build --wheel`
+- Verification: `cd bindings/python && uv run pytest` | `uv build --wheel`
 - Surgical edits: Use targeted search/replace or patches. Avoid full-file rewrites.
 - Commit cadence: Submodule commit first -> parent submodule bump + `PROGRESS.md` update.
-- Never stage build artifacts (`.venv/`, `build/`, `dist/`, `*.so`, `*.dylib`, `native/build/`).
+- Never stage build artifacts (`.venv/`, `build/`, `dist/`, `*.so`, `*.dylib`, `engine/build/`, `engine/native/build/`).
 - No Windows registry APIs: Use environment variables, config files, or `tempfile`.

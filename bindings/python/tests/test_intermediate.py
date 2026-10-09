@@ -17,7 +17,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-DATA = Path(__file__).resolve().parent.parent.parent / "data"
+DATA = Path(__file__).resolve().parent.parent.parent.parent / "data"
 SRC = Path(__file__).resolve().parent.parent / "src"
 ARB = DATA / "TestRecode.arb"
 

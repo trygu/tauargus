@@ -25,7 +25,7 @@ import pytest
 from pytauargus.batch import Suppress
 from pytauargus.engine import run_batch
 
-DATA = Path(__file__).resolve().parent.parent.parent / "data"
+DATA = Path(__file__).resolve().parent.parent.parent.parent / "data"
 
 
 @pytest.fixture()

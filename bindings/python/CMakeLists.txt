@@ -5,11 +5,11 @@ set(CMAKE_CXX_STANDARD 11)
 
 find_package(pybind11 CONFIG REQUIRED)
 
-set(NATIVE_LIB_DIR ${CMAKE_SOURCE_DIR}/../native/build/lib)
-set(NATIVE_CORE_SRC ${CMAKE_SOURCE_DIR}/../native/core/src)
-set(NATIVE_CSP_SRC ${CMAKE_SOURCE_DIR}/../native/csp/src)
-set(NATIVE_HITAS_SRC ${CMAKE_SOURCE_DIR}/../native/hitas/src)
-set(NATIVE_ROUNDER_SRC ${CMAKE_SOURCE_DIR}/../native/rounder/src)
+set(NATIVE_LIB_DIR ${CMAKE_SOURCE_DIR}/../../engine/build/lib)
+set(NATIVE_CORE_SRC ${CMAKE_SOURCE_DIR}/../../engine/native/core/src)
+set(NATIVE_CSP_SRC ${CMAKE_SOURCE_DIR}/../../engine/native/csp/src)
+set(NATIVE_HITAS_SRC ${CMAKE_SOURCE_DIR}/../../engine/native/hitas/src)
+set(NATIVE_ROUNDER_SRC ${CMAKE_SOURCE_DIR}/../../engine/native/rounder/src)
 
 # Five translation units: the module entry point plus one TU per native
 # namespace. Separate TUs keep the duplicate IProgressListener classes
@@ -52,11 +52,13 @@ set_target_properties(_tauargus PROPERTIES
 )
 
 # Ship the runtime dylibs next to the extension so the wheel is self-contained.
+# rounder links CRP (libCRP.dylib), so CRP must ship alongside it.
 add_custom_command(TARGET _tauargus POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         ${NATIVE_LIB_DIR}/libtauargus_hitas.dylib
         ${NATIVE_LIB_DIR}/libtauargus_rounder.dylib
         ${NATIVE_LIB_DIR}/libtauargus_csp.dylib
+        ${NATIVE_LIB_DIR}/libCRP.dylib
         ${PKG_DIR}
 )
 
@@ -67,5 +69,6 @@ install(FILES
     ${NATIVE_LIB_DIR}/libtauargus_hitas.dylib
     ${NATIVE_LIB_DIR}/libtauargus_rounder.dylib
     ${NATIVE_LIB_DIR}/libtauargus_csp.dylib
+    ${NATIVE_LIB_DIR}/libCRP.dylib
     DESTINATION pytauargus
 )

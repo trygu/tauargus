@@ -21,7 +21,7 @@ from pytauargus.batch import (
 )
 from pathlib import Path
 
-DATA = Path(__file__).resolve().parent.parent.parent / "data"
+DATA = Path(__file__).resolve().parent.parent.parent.parent / "data"
 
 
 class TestTestRecode:

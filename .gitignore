@@ -14,7 +14,9 @@
 *.heu
 *.sta
 CSPlogfile.txt
-python/build/
-python/build-make/
-python/dist/
-native/build/
+bindings/python/build/
+bindings/python/build-make/
+bindings/python/dist/
+engine/native/build/
+engine/build/
+*.DS_Store

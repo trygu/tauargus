@@ -1,21 +1,21 @@
-[submodule "native/csp"]
-	path = native/csp
+[submodule "engine/native/csp"]
+	path = engine/native/csp
 	url = https://github.com/trygu/CSP.git
 	branch = rewrite
-[submodule "native/crp"]
-	path = native/crp
+[submodule "engine/native/crp"]
+	path = engine/native/crp
 	url = https://github.com/trygu/CRP.git
 	branch = rewrite
-[submodule "native/hitas"]
-	path = native/hitas
+[submodule "engine/native/hitas"]
+	path = engine/native/hitas
 	url = https://github.com/trygu/tauhitas.git
 	branch = rewrite
-[submodule "native/rounder"]
-	path = native/rounder
+[submodule "engine/native/rounder"]
+	path = engine/native/rounder
 	url = https://github.com/trygu/taurounder.git
 	branch = rewrite
-[submodule "native/core"]
-	path = native/core
+[submodule "engine/native/core"]
+	path = engine/native/core
 	url = https://github.com/trygu/libtauargus.git
 	branch = rewrite
 [submodule "reference/intervalle"]
