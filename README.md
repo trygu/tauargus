@@ -61,17 +61,20 @@ Built to run unattended in containers, CI and batch services:
 - **Portable:** wheels for Linux (manylinux_2_28, so any glibc 2.28+ image such
   as `python:3.x-slim`), macOS arm64 and Windows x64.
 
-Example container image:
+A ready-made image is published to GitHub Container Registry with each release
+(Linux x86_64):
+
+```bash
+docker run --rm -v "$PWD":/work ghcr.io/trygu/tauargus run batch.arb
+```
+
+Pin a version with `ghcr.io/trygu/tauargus:0.1.1`. To build your own image:
 
 ```dockerfile
 FROM python:3.12-slim
 RUN pip install --no-cache-dir pytauargus
 WORKDIR /work
 ENTRYPOINT ["tauargus"]
-```
-
-```bash
-docker run --rm -v "$PWD":/work my-tauargus run batch.arb
 ```
 
 ## Quick start
