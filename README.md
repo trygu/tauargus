@@ -29,9 +29,10 @@ This is the original Tau-Argus solver code, not a reimplementation:
 - **Audit:** the standalone `intervalle.exe` audit program (Delphi, i.e. modern Pascal) is ported
   into the `csp` engine module, so the feasibility-interval audit runs in-process
   instead of as a separate executable.
-- **Python package:** `pytauargus` is new. Its function signatures and way of
-  working are borrowed from [rtauargus](https://github.com/InseeFrLab/rtauargus),
-  the R wrapper around Tau-Argus.
+- **Python package:** `pytauargus` is new. Its file-generation workflow builds
+  on [rtauargus](https://github.com/InseeFrLab/rtauargus), the R wrapper around
+  Tau-Argus. Its DataFrame and result API is inspired by
+  [PiArgus (`piargus`)](https://github.com/lverweijen/piargus).
 
 ## Install
 
@@ -323,6 +324,21 @@ cd bindings/python
 uv sync --extra test
 uv run pytest
 ```
+
+## Acknowledgements
+
+Thanks to the authors, maintainers and contributors of:
+
+- [rtauargus](https://github.com/InseeFrLab/rtauargus), developed by InseeFrLab
+  and its contributors. Its metadata, batch and hierarchy generation logic
+  was ported to `pytauargus`; its `micro_rtauargus()` workflow also informed
+  the high-level `protect()` pipeline.
+- [PiArgus (`piargus`)](https://github.com/lverweijen/piargus), by lverweijen
+  and contributors. Its DataFrame-to-table workflow and result API inspired
+  `TableResult` and its `safe()`, `status()`, `unsafe()` and `dataframe()` accessors.
+
+Their work made these interfaces possible and provides valuable examples of
+integrating Tau-Argus into reproducible data-processing workflows.
 
 ## License
 

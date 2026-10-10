@@ -17,8 +17,8 @@ Goal: HiGHS solvers, portable cloud-native build, headless Python CLI.
   37 executed code cells; relative-workdir regression fixed; 219 tests pass.
 
 ## Current review — draft PR #5 to `master`
-- Prepared-table guard verified: native release/ASan and 219 Python tests.
-  Regression now runs in CI; completed details are in ARCHIVE.md.
+- Prepared-table guard and attribution updates are documented in ARCHIVE.md.
+  PR #5 includes rtauargus and PiArgus acknowledgements in both READMEs.
 
 ## Next (priority order)
 1. **GHCR rename → `tauargus-engine`** — 0.2.1 verified. Delete old

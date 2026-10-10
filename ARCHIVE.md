@@ -381,3 +381,10 @@ the `.rda` writer. No `.tab`/`.hst` generator, no native `.hrc` getter
 - Native regression passes in release and ASan builds. Rebuilt the Python
   extension against the updated core: **219 passed, 2 optional polars skips**.
   Enabled the native regression in the existing three-platform test workflow.
+
+## Wrapper acknowledgements (2026-10-10)
+
+- Added acknowledgements in the root and Python binding READMEs, with links
+  to InseeFrLab/rtauargus and lverweijen/piargus (PiArgus).
+- Credited rtauargus for the ported file-generation logic and protection flow;
+  credited PiArgus for DataFrame/result API inspiration and TableResult accessors.
