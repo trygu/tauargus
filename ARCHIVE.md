@@ -219,3 +219,7 @@ the CSP/HiGHS teardown checkpoint in PROGRESS.md / `docs/native-debugging.md`.)
   added `*.pdf` binary). Root now contains only: docs, `engine/`,
   `bindings/`, `data/`, `src/` (Java, kept for Task 8), and top-level
   project files.
+
+## README rewrite (2026-10-10)
+README rewritten: no Greek letters; top-level project is `tauargus-engine`
+(C/C++ libraries under `engine/`), `pytauargus` is the Python package/CLI using them.

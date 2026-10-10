@@ -1,15 +1,18 @@
-# τ-ARGUS (native engine + CLI)
+# tauargus-engine
 
-A native, headless rewrite of **τ-ARGUS**, the statistical disclosure control
-(SDC) tool statistics agencies use to protect tabular data before publication.
-It ships as the `tauargus` command-line tool and the `pytauargus` Python
-package, and aims to be a drop-in replacement for legacy τ-ARGUS 4.1 batch
-runs: same `.arb` batch files, same file I/O, same outputs.
+Native, headless engine for statistical disclosure control (SDC) of tabular
+data, plus a Python tool that drives it. It is a drop-in replacement for the
+batch mode of legacy Tau-Argus 4.1: same `.arb` batch files, file formats and
+outputs, without the GUI.
 
-- Runs `.arb` batch files without a GUI, so it suits servers and pipelines.
-- Uses the open-source [HiGHS](https://github.com/ERGO-Code/HiGHS) solver. The
-  legacy CPLEX, XPRESS and SCIP backends are gone.
-- Self-contained wheels bundle HiGHS and the engine libraries.
+The project has two parts:
+
+- **tauargus-engine** (`engine/`): the C/C++ libraries that do the work, built
+  against the open-source [HiGHS](https://github.com/ERGO-Code/HiGHS) solver.
+  The legacy CPLEX, XPRESS and SCIP backends are gone.
+- **pytauargus** (`bindings/python/`): the Python package and `tauargus`
+  command-line tool that link those libraries. Wheels bundle HiGHS and the
+  engine.
 
 ## Install
 
@@ -50,19 +53,22 @@ tauargus save     mybatch.arb    # compute, then write tables
 tauargus tables   mybatch.arb    # print a table summary
 ```
 
+`<SOLVER>` tags in a batch file are accepted, but only HiGHS is used; any
+other solver name logs a warning and the job continues.
+
 Sample batches and fixtures are in [data/](data). The batch grammar, file
-formats and parameters follow the legacy τ-ARGUS 4.1 manual, which is bundled
+formats and parameters follow the legacy Tau-Argus 4.1 manual, which is bundled
 in [docs/](docs).
 
-## What τ-ARGUS does
+## What it does
 
-It reduces the risk that published tables disclose information about
+SDC reduces the risk that published tables disclose information about
 individual respondents or businesses. A cell can be sensitive because too few
 respondents contribute, a few dominate, or another contributor could estimate
 a contribution. Deleting the value is often not enough, because totals and
-bounds can reveal it, so τ-ARGUS also protects related cells. It is the
-tabular counterpart to [μ-ARGUS](https://github.com/INSEE/Argus), which
-protects microdata.
+bounds can reveal it, so related cells are protected too. This is the tabular
+counterpart to [mu-Argus](https://github.com/INSEE/Argus), which protects
+microdata.
 
 A batch file drives the whole pipeline:
 
@@ -79,7 +85,7 @@ input data + metadata
 ## Architecture
 
 ```
-.arb batch  ->  tauargus CLI  ->  pytauargus  ->  native C++ engine  ->  HiGHS
+.arb batch  ->  tauargus CLI  ->  pytauargus  ->  tauargus-engine (C/C++)  ->  HiGHS
 ```
 
 The engine is C++11, built from five git submodules under `engine/native/`:
@@ -98,7 +104,7 @@ The engine is C++11, built from five git submodules under `engine/native/`:
 ├── bindings/
 │   └── python/  pybind11 bindings (cpp/), pytauargus package (src/), tests/
 ├── data/        sample .arb batches and tabular fixtures
-├── docs/        legacy τ-ARGUS 4.1 manual and design notes
+├── docs/        legacy Tau-Argus 4.1 manual and design notes
 └── src/         legacy Java/Swing front-end (read-only, pending removal)
 ```
 
@@ -144,7 +150,7 @@ uv run pytest
 ## License
 
 Distributed under the European Union Public Licence (EUPL) v1.2; see
-[LICENSE](LICENSE). τ-ARGUS is © Statistics Netherlands, with contributions
+[LICENSE](LICENSE). Tau-Argus is © Statistics Netherlands, with contributions
 from the original author teams of each solver module.
 
 This software is provided "AS IS", without warranties or conditions of any
