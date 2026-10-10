@@ -21,3 +21,6 @@
 [submodule "references/rtauargus"]
 	path = references/rtauargus
 	url = https://github.com/InseeFrLab/rtauargus
+[submodule "references/piargus"]
+	path = references/piargus
+	url = https://github.com/lverweijen/piargus.git
