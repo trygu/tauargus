@@ -18,21 +18,18 @@ Goal: HiGHS solvers, portable cloud-native build, headless Python CLI replacing 
   fixed (R `strsplit` = regex, applied per block). 177 tests green.
 
 ## Next (priority order)
-1. **GHCR rename → `tauargus-engine`** — 0.2.1 on `ghcr.io/trygu/tauargus-engine`
-   (`:0.2.1`+`:latest`, verified). Remaining: delete old `trygu/tauargus` package.
+1. **GHCR rename → `tauargus-engine`** — 0.2.1 verified (`:0.2.1`+`:latest`).
+   Remaining: delete old `trygu/tauargus` package.
 2. **Top-level project rename** (repo/package naming) — decide + execute later.
 3. Task 1: document solver strategy (legacy roles → HiGHS); Dockerfile.
-4. **ANSI-TUI design tightened** (`docs/ui-design.md`): Option A (headless
-   CLI) is the product; Option B = `textual` TUI as **own PyPI package
-   `pytauargus-tui`** (`bindings/tui/`, script `tauargus-tui`). Task 8
-   unblocked either way; TUI work on the `tui` branch.
+4. **ANSI-TUI design** (`docs/ui-design.md`): headless CLI is the product;
+   `textual` TUI as own PyPI `pytauargus-tui` (`bindings/tui/`). TUI on `tui` branch.
 
 ## Watch items
 - OPT/MOD nonzero `max_time` → deterministic segfault (solver time-limit);
-  notebooks/READMEs use `0`. (~40% `Highs_destroy` teardown segfault FIXED
-  2026-10-07, column-0 RHS sentinel — see `docs/native-debugging.md`.)
+  notebooks/READMEs use `0`. (`Highs_destroy` segfault FIXED 2026-10-07 —
+  `docs/native-debugging.md`.)
 - `open_microdata` calls `clean_all` — safe only because tables finalize after.
 - Parquet as the microdata dataframe backend (not started).
-- **Reference added: `piargus`** (`references/piargus`, lverweijen) — Python
-  τ-ARGUS wrapper; study how our `pytauargus` aligns with its API/flow
-  (transient reference, drop after alignment review).
+- **Ref: `piargus`** (`references/piargus`, lverweijen) — Python τ-ARGUS
+  wrapper; compare its API/flow against `pytauargus` (transient, drop after).
