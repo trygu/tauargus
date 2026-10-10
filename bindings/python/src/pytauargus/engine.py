@@ -170,9 +170,12 @@ class Variable:
 
     @property
     def is_numeric(self) -> bool:
+        # A variable is either categorical or numeric (native SetVariable):
+        # CATEGORICAL/CAT_RESP are NOT numeric (the native would then parse
+        # their codes with ConvertNumeric and fail with ISNOTNUMERIC).
         return self.type in (
-            "CATEGORICAL", "CAT_RESP", "RESPONSE", "WEIGHT",
-            "SHADOW", "COST", "FREQUENCY", "TOP_N",
+            "RESPONSE", "WEIGHT", "SHADOW", "COST",
+            "FREQUENCY", "TOP_N",
             "LOWER_PROTECTION_LEVEL", "UPPER_PROTECTION_LEVEL",
             "RECORD_KEY",
         )
