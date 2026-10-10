@@ -118,6 +118,7 @@ def protect(microdata,
     workdir:
         Directory for all intermediate files. Defaults to a fresh tempdir (kept,
         so the result ``.tab`` files stay readable; delete it when done).
+        Relative paths use the caller's working directory; returned paths are absolute.
     run:
         If ``False``, write the ``.asc``/``.rda``/``.arb`` only and return
         without running the engine (``tables``/``engine`` are empty/``None``).
@@ -135,9 +136,10 @@ def protect(microdata,
 
     if workdir is None:
         workdir = tempfile.mkdtemp(prefix="pytauargus_")
-    else:
-        Path(workdir).mkdir(parents=True, exist_ok=True)
-    wd = Path(workdir)
+    # Batch output paths are resolved relative to the .arb directory. Use
+    # absolute paths throughout so a relative workdir is not prefixed twice.
+    wd = Path(workdir).resolve()
+    wd.mkdir(parents=True, exist_ok=True)
 
     asc = str(wd / "micro.asc")
     rda = str(wd / "micro.rda")

@@ -118,7 +118,7 @@ def test_accepts_list_of_dicts(tmp_path):
 # ===========================================================================
 # Full run — subprocess isolation (native solver)
 # ===========================================================================
-def _run_protect_subprocess(micro, tables, response, suppress, **kwargs):
+def _run_protect_subprocess(micro, tables, response, suppress, cwd=None, **kwargs):
     code = (
         "import json\n"
         "from pytauargus.protect import protect\n"
@@ -139,6 +139,7 @@ def _run_protect_subprocess(micro, tables, response, suppress, **kwargs):
         "out = {\n"
         "  'n_tables': len(res.tables),\n"
         "  'files': res.files,\n"
+        "  'workdir': res.workdir,\n"
         "  'results': [\n"
         "     {'n': t.n_cells, 'status': t.status(), 'safe': t.safe(),\n"
         "      'unsafe': t.unsafe(), 'cols': t.columns}\n"
@@ -151,7 +152,7 @@ def _run_protect_subprocess(micro, tables, response, suppress, **kwargs):
     env["PYTHONFAULTHANDLER"] = "1"
     proc = subprocess.run(
         [sys.executable, "-c", code], capture_output=True, text=True, env=env,
-        cwd=str(Path(__file__).resolve().parent), timeout=90,
+        cwd=str(cwd or Path(__file__).resolve().parent), timeout=90,
     )
     assert proc.returncode == 0, (
         f"protect() subprocess failed (rc={proc.returncode}):\n"
@@ -193,6 +194,18 @@ def test_protect_full_run_subprocess(kwargs):
             assert sf == "x"
         else:
             assert isinstance(sf, (int, float))
+
+
+def test_protect_relative_workdir_subprocess(tmp_path):
+    out = _run_protect_subprocess(
+        MICRO, [["Region", "Size"]], "Var2", "OPT(1)",
+        cwd=tmp_path, workdir="runs/protected",
+    )
+    expected = (tmp_path / "runs/protected").resolve()
+    assert out["workdir"] == str(expected)
+    assert all(Path(path).is_absolute() and Path(path).parent == expected
+               for path in out["files"].values())
+    assert Path(out["files"]["tab1"]).exists()
 
 
 def test_public_protect_import_in_fresh_process():
