@@ -1,6 +1,6 @@
 """Build the pytauargus example notebooks.
 
-Run:  uv run --with nbformat python notebooks/_build.py
+Run:  uv run --with nbformat python notebooks/_build.py [name.ipynb ...]
 
 Each notebook is written as a clean .ipynb (empty outputs). Run
 `python notebooks/_run.py` to execute them and save real outputs.
@@ -31,6 +31,16 @@ def code(src: str):
 
 
 def write_notebook(name: str, cells: list):
+    path = NB_DIR / name
+    if path.exists():
+        previous = nbformat.read(path, as_version=4)
+        ids = {}
+        for cell in previous.cells:
+            ids.setdefault((cell.cell_type, cell.source), []).append(cell.id)
+        for cell in cells:
+            matching = ids.get((cell.cell_type, cell.source), [])
+            if matching:
+                cell.id = matching.pop(0)
     nb = nbformat.v4.new_notebook()
     nb["cells"] = cells
     nb["metadata"] = {
@@ -42,7 +52,6 @@ def write_notebook(name: str, cells: list):
         "language_info": {"name": "python", "version": "3"},
     }
     nbformat.validate(nb)
-    path = NB_DIR / name
     nbformat.write(nb, path)
     print(f"  wrote {path}")
 
@@ -62,8 +71,22 @@ DATA = next(
 OUT = _here / "out"          # scratch dir for notebook outputs (gitignored)
 OUT.mkdir(exist_ok=True)
 print(f"pytauargus {pytauargus.__version__}")
-print(f"data : {DATA}")
-print(f"out  : {OUT}")
+print("data : <repo>/data")
+print("out  : ./out")
+''')
+
+DATAFRAME = code('''\
+import pandas as pd
+from pytauargus import protect
+
+# Twelve synthetic respondents; North/Retail has one dominant contributor.
+micro = pd.DataFrame({
+    "Region": ["North"] * 6 + ["South"] * 6,
+    "Sector": ["Retail"] * 3 + ["Services"] * 3
+              + ["Retail"] * 3 + ["Services"] * 3,
+    "Turnover": [100., 5., 5., 10., 10., 10., 20., 20., 20., 30., 30., 30.],
+})
+micro
 ''')
 
 
@@ -77,14 +100,14 @@ nb1 = [
         "",
         "**Statistical Disclosure Control (SDC) for tabular data**, as a",
         "Python package and a headless `tauargus` command. This notebook",
-        "walks through the complete pipeline: load metadata → run a batch →",
-        "inspect tables → read individual cells.",
+        "starts with a DataFrame: `protect()` → `TableResult` → masked output.",
+        "It then shows how existing metadata and `.arb` batches fit the same engine.",
         "",
         "## How to run",
         "",
         "```bash",
         "# from the bindings/python/ directory",
-        "uv sync                    # or: pip install pytauargus",
+        "uv sync --extra notebooks",
         "uv run --with jupyterlab jupyter lab notebooks/01_quickstart.ipynb",
         "```",
         "",
@@ -97,6 +120,9 @@ nb1 = [
         "",
         "## What you need",
         "",
+        "- Build the current development source first; see the repository",
+        "  [source-build instructions](../../../README.md#building-from-source).",
+        "  `protect()` is new on this branch and awaits the next release.",
         "- The repository's `data/` fixtures (included in the repo)",
         "- Python 3.10–3.13; macOS arm64 / Linux x86_64+aarch64 / Windows x64",
         "- **No licensed solver, no SPSS, no external executable** — the LP/MIP",
@@ -104,9 +130,61 @@ nb1 = [
         "",
         "---",
     ),
+    SETUP,
 
     md(
-        "## 1. The public API",
+        "## 1. Protect a DataFrame",
+        "",
+        "Each row below is one respondent. `NK(2,75)` marks a cell as unsafe",
+        "when its two largest contributors exceed 75% of the response.",
+        "`protect()` writes `.asc`, `.rda` and `.arb`, computes the crossing,",
+        "applies OPT suppression by default and reads the result back.",
+    ),
+    DATAFRAME,
+    code('''\
+protected = protect(
+    micro, ["Region", "Sector"], response="Turnover",
+    safety_rules="NK(2,75)", workdir=str(OUT / "01_protect"),
+)
+table = protected.tables[0]
+assert table.n_cells == 9  # 2 x 2 crossing, including row/column totals
+print(table)
+print("status:", table.status())
+'''),
+    md(
+        "## 2. Build the masked publication table",
+        "",
+        "`TableResult.dataframe()` is the full diagnostic result and includes",
+        "original responses. `unsafe()` returns those unmasked values.",
+        "For publication, select the explanatory codes and use `safe()` for",
+        "the response: primary (`U`) and secondary (`M`) cells become `x`.",
+        "Use `safe(None)` if your downstream format expects missing values.",
+    ),
+    code('''\
+published = table.dataframe()[["Region", "Sector"]].copy()
+published["Turnover"] = table.safe()
+assert all(value == "x" for status, value in zip(table.status(), table.safe())
+           if status in {"U", "M"})
+published
+'''),
+    md(
+        "### Results and intermediate files",
+        "",
+        "`ProtectResult.tables` holds one result per table; `.engine` gives",
+        "access to audit and other engine operations. `.files` and `.workdir`",
+        "locate the generated inputs and type-5 `.tab` results.",
+        "The files and diagnostic values are analyst artifacts. Keep them",
+        "separate from the masked publication table.",
+    ),
+    code('''\
+print("files:", {key: Path(path).name for key, path in protected.files.items()})
+print("original response:", table.unsafe())  # synthetic analyst data only
+published.to_csv(OUT / "01_dataframe_publication.csv", index=False)
+print("wrote 01_dataframe_publication.csv")
+'''),
+
+    md(
+        "## Working with existing batches",
         "",
         "pytauargus has **zero runtime dependencies**; the native engine",
         "(C/C++ port of the Tau-Argus core, built against HiGHS) ships inside",
@@ -114,6 +192,8 @@ nb1 = [
         "",
         "| Symbol | Source | Purpose |",
         "|--------|--------|---------|",
+        "| `protect(…)` / `ProtectResult` | `pytauargus` | DataFrame/dict → protected tables + files + engine |",
+        "| `TableResult` | `pytauargus` | `safe()`, `status()`, `unsafe()`, `dataframe()` |",
         "| `Engine` | `pytauargus.engine` | High-level driver for the native engine |",
         "| `run_batch(arb)` | `pytauargus.engine` | Parse + execute a `.arb` batch file → `Engine` |",
         "| `parse_rda(path)` | `pytauargus.engine` | Parse `.rda` metadata → `Metadata` |",
@@ -125,7 +205,7 @@ nb1 = [
     ),
 
     md(
-        "## 2. The data",
+        "### Repository fixtures",
         "",
         "The repo ships the legacy Tau-Argus 4.1 test dataset (the same files",
         "used by the legacy product's documentation):",
@@ -134,7 +214,6 @@ nb1 = [
         "- `tau_testW.rda` — metadata: positions, widths, types, codelists",
         "- `TestRecode.arb` — a ready-made batch file (2 tables + recodes)",
     ),
-    SETUP,
 
     md(
         "### The microdata file (first 4 lines)",
@@ -165,7 +244,7 @@ with open(DATA / "tau_testW.rda") as f:
 '''),
 
     md(
-        "## 3. Parse the metadata",
+        "### Parse the metadata",
         "",
         "`parse_rda` reads the `.rda` file and returns a `Metadata` object —",
         "a list of `Variable` records plus file-level options.",
@@ -200,7 +279,7 @@ for i, v in enumerate(meta.variables):
     ),
 
     md(
-        "## 4. Run a batch",
+        "### Run a batch",
         "",
         "`run_batch` is the main entry point. It parses the `.arb` file,",
         "executes every command in order, and returns the configured",
@@ -246,7 +325,7 @@ for c in cmds:
 '''),
 
     md(
-        "## 5. Inspect cells",
+        "### Inspect native cells",
         "",
         "After `run_batch`, every cell in every table has a **status** and a",
         "**value**. Status codes (from the native engine):",
@@ -320,9 +399,11 @@ for idx in range(6):
         "",
         "You've now:",
         "",
-        "1. Parsed the `.rda` metadata and listed the variables",
-        "2. Run a `.arb` batch through the engine",
-        "3. Inspected computed table cells and their safety statuses",
+        "1. Protected a DataFrame with `protect()` and inspected `TableResult`",
+        "2. Exported masked responses with `safe()`",
+        "3. Parsed the `.rda` metadata and listed the variables",
+        "4. Run a `.arb` batch through the engine",
+        "5. Inspected computed table cells and their safety statuses",
         "",
         "**Next:** [02_protection_and_audit.ipynb](02_protection_and_audit.ipynb)",
         "— suppress the unsafe cells and run the audit (Intervalle).",
@@ -346,6 +427,10 @@ nb2 = [
         "   suppressed cell (the legacy `intervalle.exe`, now in-process)",
         "4. **Export** the protected table (CSV or legacy INTERMEDIATE)",
         "",
+        "Start with the DataFrame API, then inspect the equivalent lower-level",
+        "batch workflow. `protect()` suppresses; audit is an explicit next step.",
+        "Build this development branch first; the new API awaits release.",
+        "",
         "## The audit in one paragraph",
         "",
         "A suppressed cell has a range of values it could take while staying",
@@ -362,10 +447,81 @@ nb2 = [
     SETUP,
 
     md(
-        "## 1. Compute the tables",
+        "## DataFrame protection, audit and export",
         "",
-        "Run the batch. The NK (n-k) safety rule flags cells whose value is",
-        "dominated by k other cells — these start life as `unsafe_rule`.",
+        "Use the same synthetic respondents as the quickstart. OPT chooses",
+        "secondary cells so published totals cannot reconstruct primary cells.",
+    ),
+    DATAFRAME,
+    code('''\
+from collections import Counter
+
+protected = protect(
+    micro, ["Region", "Sector"], response="Turnover",
+    safety_rules="NK(2,75)", suppress="OPT(1)",
+    workdir=str(OUT / "02_protect"),
+)
+table = protected.tables[0]
+assert "U" in table.status() and "M" in table.status()
+print("status counts:", dict(Counter(table.status())))
+table.dataframe()[["Region", "Sector"]].assign(Turnover=table.safe())
+'''),
+    md(
+        "### Audit the returned engine",
+        "",
+        "`safe()` masks the suppressed cells; it does not run an audit.",
+        "Call `protected.engine.audit(0)` explicitly (engine table indices",
+        "are zero-based). `min`/`max` are the realized feasibility bounds.",
+        "The `lower`/`upper` columns in the default result hold protection levels,",
+        "and the result is a snapshot: it does not refresh when audit runs.",
+    ),
+    code('''\
+audit_rows = protected.engine.audit(0)
+audit_frame = pd.DataFrame(audit_rows)
+assert len(audit_frame) > 0 and not audit_frame["unsafe"].any()
+assert ((audit_frame["min"] <= audit_frame["value"])
+        & (audit_frame["value"] <= audit_frame["max"])).all()
+audit_frame[["cell", "value", "min", "max", "unsafe"]]
+'''),
+    md(
+        "### Publish masked values; retain the audit separately",
+        "",
+        "The full DataFrame and `.tab` intermediates contain original values.",
+        "Export the selected codes with `safe()` as the response. Keep the",
+        "INTERMEDIATE file with realized bounds for internal audit review.",
+    ),
+    code('''\
+release = table.dataframe()[["Region", "Sector"]].assign(Turnover=table.safe())
+release.to_csv(OUT / "02_dataframe_publication.csv", index=False)
+protected.engine.write_intermediate_table(
+    0, str(OUT / "02_dataframe_audit.tab"), with_audit=True,
+)
+print("wrote 02_dataframe_publication.csv and 02_dataframe_audit.tab")
+release
+'''),
+    md(
+        "### Choose another suppression method",
+        "",
+        "Switch to `MOD(1)` for modular suppression. Each call computes its",
+        "own tables; use a separate working directory for each result.",
+    ),
+    code('''\
+modular = protect(
+    micro, ["Region", "Sector"], response="Turnover",
+    safety_rules="NK(2,75)", suppress="MOD(1)",
+    workdir=str(OUT / "02_modular"),
+)
+print("MOD status counts:", dict(Counter(modular.tables[0].status())))
+modular.tables[0].dataframe()[["Region", "Sector"]].assign(
+    Turnover=modular.tables[0].safe(),
+)
+'''),
+
+    md(
+        "## 1. Batch API: compute the tables",
+        "",
+        "Run the batch. `NK(n,k)` flags cells whose n largest contributors",
+        "exceed k percent of the response — these start as `unsafe_rule`.",
     ),
     code('''\
 from pytauargus.engine import run_batch
@@ -531,10 +687,11 @@ print(f"row 1:  {lines[1][:100]}…")
         "",
         "You've now:",
         "",
-        "1. Computed tables and inspected the safety-rule results",
-        "2. Applied OPT suppression (and RND as an alternate flow)",
-        "3. Audited suppressed cells — realized feasibility intervals",
-        "4. Exported the protected table (CSV + INTERMEDIATE)",
+        "1. Protected a DataFrame with OPT/MOD and inspected masked responses",
+        "2. Computed batch tables and inspected the safety-rule results",
+        "3. Applied batch OPT suppression (and RND as an alternate flow)",
+        "4. Audited suppressed cells — realized feasibility intervals",
+        "5. Exported masked CSVs and retained INTERMEDIATE audit files",
         "",
         "**Next:** [03_generators.ipynb](03_generators.ipynb) — generate",
         "`.arb` / `.rda` / `.hrc` input files from Python.",
@@ -550,6 +707,10 @@ nb3 = [
     md(
         "# Generating Batch Inputs",
         "",
+        "Start with `protect(..., run=False)` to generate a complete pipeline",
+        "from a DataFrame, inspect its files, then protect multiple tables.",
+        "This API is new on the development branch; build the current source.",
+        "",
         "pytauargus can also **write** the batch input files, as a port of",
         "[rtauargus](https://github.com/InseeFrLab/rtauargus) (the R wrapper).",
         "The generators emit exactly the file formats the engine reads, so",
@@ -557,20 +718,73 @@ nb3 = [
         "",
         "| Function | Output | Ported from (R) |",
         "|----------|--------|-----------------|",
+        "| `protect(…, run=False)` | `.asc` + `.rda` + `.arb` and planned `.tab` paths | Python pipeline |",
+        "| `micro_asc_rda(…)` | fixed-width `.asc` + `.rda` | `micro_asc_rda.R` |",
         "| `micro_arb(…)` | `.arb` batch file | `micro_arb.R::micro_arb` |",
         "| `write_rda` / `rda_text` | `.rda` metadata text | `micro_asc_rda.R::write_rda` |",
         "| `write_hrc(…)` | `.hrc` hierarchy file | `hrc.R::write_hrc` |",
         "",
-        "> **Gap:** the fixed-width `.asc` microdata writer (`gdata::write.fwf`)",
-        "> is **not** ported. Produce your own `.asc` (pandas, R, …); the",
-        "> generators only *reference* it by name.",
+        "`protect()` coordinates these generators and runs the engine when",
+        "`run=True` (the default). Use individual writers for custom batches.",
         "",
         "## Setup",
     ),
     SETUP,
 
     md(
-        "## 1. `micro_arb` — write a `.arb` batch file",
+        "## 1. Preview the pipeline without running the engine",
+        "",
+        "A flat list of explanatory variables specifies one table; a nested",
+        "list specifies several. `run=False` writes inputs and returns planned",
+        "output paths, with empty `.tables` and `.engine=None`.",
+    ),
+    DATAFRAME,
+    code('''\
+tables = [["Region", "Sector"], ["Region"]]
+draft = protect(
+    micro, tables, response="Turnover", safety_rules="NK(2,75)",
+    suppress="OPT(1)", run=False, workdir=str(OUT / "03_draft"),
+)
+assert draft.tables == [] and draft.engine is None
+assert all(Path(draft.files[key]).exists() for key in ("asc", "rda", "arb"))
+print("files:", {key: Path(path).name for key, path in draft.files.items()})
+print("\\n".join(Path(draft.files["rda"]).read_text().splitlines()[:16]))
+'''),
+    md(
+        "### Inspect the generated batch",
+        "",
+        "The response and safety rule are recycled across tables. A single",
+        "suppression specification gets the correct table number (`OPT(1)`,",
+        "then `OPT(2)`). The batch uses type-5 `SO+` output for `TableResult`.",
+    ),
+    code('''\
+# Display relative paths so this preview is portable.
+batch_text = Path(draft.files["arb"]).read_text()
+print(batch_text.replace(str(Path(draft.workdir)), "<workdir>"))
+'''),
+    md(
+        "## 2. Run the multi-table pipeline",
+        "",
+        "The default `run=True` executes the generated batch and returns",
+        "one `TableResult` per table. Use a separate directory to retain both",
+        "the file-only preview and the executed run.",
+    ),
+    code('''\
+from collections import Counter
+
+protected = protect(
+    micro, tables, response="Turnover", safety_rules="NK(2,75)",
+    suppress="OPT(1)", workdir=str(OUT / "03_protect"),
+)
+assert [table.n_cells for table in protected.tables] == [9, 3]
+for i, table in enumerate(protected.tables, 1):
+    print(f"table {i}: {table.n_cells} cells; {dict(Counter(table.status()))}")
+region = protected.tables[1]
+region.dataframe()[["Region"]].assign(Turnover=region.safe())
+'''),
+
+    md(
+        "## 3. `micro_arb` — write a custom `.arb` batch file",
         "",
         "The main generator. Signature:",
         "",
@@ -602,6 +816,7 @@ res = micro_arb(
     safety_rules=["NK(2,75)"],     # recycled across both tables
     suppress="OPT(.,0)",           # "." -> table number; 0 = no time limit
     output_names=["out1.csv", "out2.csv"],
+    output_type="1",             # CSV (the generator default is SBS/type 4)
 )
 print(res)
 print()
@@ -630,7 +845,7 @@ print((OUT / "demo2.arb").read_text())
 '''),
 
     md(
-        "## 2. `write_rda` / `rda_text` — write `.rda` metadata",
+        "## 4. `write_rda` / `rda_text` — write `.rda` metadata",
         "",
         "Each variable is a dict describing its position, width, type, and",
         "optional codelist / hierarchy:",
@@ -680,7 +895,7 @@ print(rda_text(info_vars))
 '''),
 
     md(
-        "## 3. `write_hrc` — write a `.hrc` hierarchy file",
+        "## 5. `write_hrc` — write a `.hrc` hierarchy file",
         "",
         "Builds a hierarchy from microdata columns ordered **finest →",
         "coarsest** and writes it as a `.hrc` file (child levels are",
@@ -747,7 +962,7 @@ print((OUT / "pos.hrc").read_text())
 '''),
 
     md(
-        "## 4. Round-trip: generate → run → inspect",
+        "## 6. Custom batch round-trip: generate → run → inspect",
         "",
         "A generated `.arb` feeds straight back into the engine. This is",
         "the full scripted pipeline — note the in-arb `<SUPPRESS> OPT(…)`",
@@ -774,7 +989,8 @@ for i in range(eng._n_tables):
     ),
     code('''\
 for p in sorted(OUT.iterdir()):
-    print(f"  {p.name:<16} {p.stat().st_size:>8} bytes")
+    if p.is_file():
+        print(f"  {p.name:<16} {p.stat().st_size:>8} bytes")
 '''),
 
     md(
@@ -782,8 +998,10 @@ for p in sorted(OUT.iterdir()):
         "",
         "- `suppress=\"OPT(.,0)\"` uses max-time `0` (no limit), so this example",
         "  can finish without a deadline. Positive time limits are in minutes.",
-        "- The `.asc` microdata writer is **not** ported (R's",
-        "  `gdata::write.fwf`); bring your own fixed-width file.",
+        "- `protect()` and `micro_asc_rda()` write the `.asc` file too;",
+        "  `micro_arb()` only references an existing `.asc` / `.rda` pair.",
+        "- Working directories and original values are retained for analysis;",
+        "  publish the masked `safe()` response, and clean up intermediates yourself.",
         "- `write_hrc` with a **single** column emits a flat sorted list and",
         "  warns; `fill_na` warns when NAs are imputed.",
     ),
@@ -793,10 +1011,12 @@ for p in sorted(OUT.iterdir()):
         "",
         "You've now:",
         "",
-        "1. Generated `.arb` batch files with `micro_arb`",
-        "2. Generated `.rda` metadata text with `write_rda` / `rda_text`",
-        "3. Generated `.hrc` hierarchy files with `write_hrc`",
-        "4. Round-tripped: generated batch → engine → tables + CSVs",
+        "1. Previewed `.asc` / `.rda` / `.arb` with `protect(run=False)`",
+        "2. Protected multiple tables and read their `TableResult` objects",
+        "3. Generated custom `.arb` batch files with `micro_arb`",
+        "4. Generated `.rda` metadata text with `write_rda` / `rda_text`",
+        "5. Generated `.hrc` hierarchy files with `write_hrc`",
+        "6. Round-tripped: generated batch → engine → tables + CSVs",
         "",
         "**Back to:** [01_quickstart.ipynb](01_quickstart.ipynb) ·",
         "[02_protection_and_audit.ipynb](02_protection_and_audit.ipynb)",
@@ -806,7 +1026,14 @@ for p in sorted(OUT.iterdir()):
 
 # ── write all notebooks ───────────────────────────────────────────────────────
 
-write_notebook("01_quickstart.ipynb", nb1)
-write_notebook("02_protection_and_audit.ipynb", nb2)
-write_notebook("03_generators.ipynb", nb3)
+ALL = {
+    "01_quickstart.ipynb": nb1,
+    "02_protection_and_audit.ipynb": nb2,
+    "03_generators.ipynb": nb3,
+}
+names = sys.argv[1:] or list(ALL)
+for name in names:
+    if name not in ALL:
+        sys.exit(f"Unknown notebook: {name}")
+    write_notebook(name, ALL[name])
 print("done")

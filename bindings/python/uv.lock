@@ -1820,6 +1820,8 @@ notebooks = [
     { name = "jupyterlab" },
     { name = "nbclient" },
     { name = "nbformat" },
+    { name = "pandas", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "pandas", version = "3.0.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
 test = [
     { name = "pandas", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -1834,6 +1836,7 @@ requires-dist = [
     { name = "nbclient", marker = "extra == 'notebooks'" },
     { name = "nbformat", marker = "extra == 'notebooks'" },
     { name = "pandas", marker = "extra == 'dataframe'" },
+    { name = "pandas", marker = "extra == 'notebooks'" },
     { name = "pandas", marker = "extra == 'test'" },
     { name = "pytest", marker = "extra == 'test'" },
 ]

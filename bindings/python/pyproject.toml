@@ -25,7 +25,7 @@ dependencies = []
 dataframe = ["pandas"]
 test = ["pytest", "pandas"]
 # Interactive examples + headless execution of the notebooks/ directory.
-notebooks = ["jupyterlab", "nbclient", "nbformat", "ipykernel"]
+notebooks = ["jupyterlab", "nbclient", "nbformat", "ipykernel", "pandas"]
 
 [project.urls]
 Homepage = "https://github.com/trygu/tauargus-engine"

@@ -6,13 +6,21 @@ surface it exercises.
 
 | # | Notebook | What it covers |
 |---|----------|----------------|
-| 1 | [`01_quickstart.ipynb`](01_quickstart.ipynb) | import, the test data, `parse_rda`/`Metadata`, `run_batch`, table + cell inspection |
-| 2 | [`02_protection_and_audit.ipynb`](02_protection_and_audit.ipynb) | safety rules → OPT/MOD/RND suppression → status distribution → `audit()` realized feasibility intervals (Intervalle) → CSV / INTERMEDIATE export |
-| 3 | [`03_generators.ipynb`](03_generators.ipynb) | `micro_arb`, `write_rda`/`rda_text`, `write_hrc`, and a generate→run round-trip |
+| 1 | [`01_quickstart.ipynb`](01_quickstart.ipynb) | DataFrame → `protect()` → `TableResult` → masked CSV; existing batches and native cell inspection |
+| 2 | [`02_protection_and_audit.ipynb`](02_protection_and_audit.ipynb) | OPT/MOD DataFrame protection, explicit audit and masked export; batch OPT/MOD/RND |
+| 3 | [`03_generators.ipynb`](03_generators.ipynb) | `protect(run=False)` file preview, multiple tables, custom writers and batch round-trip |
+
+All three use twelve synthetic respondents to demonstrate the new DataFrame
+API. `dataframe()` and `unsafe()` expose original values for analysis; the
+publication examples use `safe()` to mask primary and secondary suppression.
+Audit runs explicitly on the returned engine.
 
 ## Running
 
-From `bindings/python/`:
+Build the current development checkout using the repository's
+[source-build instructions](../../../README.md#building-from-source).
+The DataFrame API awaits the next release, so existing published wheels may
+not include it. Then, from `bindings/python/`:
 
 ```bash
 # interactive
@@ -20,18 +28,25 @@ uv sync --extra notebooks
 uv run --with jupyterlab jupyter lab notebooks/
 
 # headless: execute every notebook and re-save its outputs
-uv run --with nbclient --with nbformat --with ipykernel python notebooks/_run.py
+uv run python notebooks/_run.py
 ```
 
 The notebooks locate the repo `data/` fixtures by walking up from the current
 directory, and write their scratch outputs to `notebooks/out/` (gitignored).
 
-`tests/test_notebooks.py` executes the same notebooks under pytest (it skips
-when `nbclient` is not installed, keeping the default `uv run pytest` gate
-fast and dependency-free).
+The `notebooks` extra includes pandas and the execution tools.
+`tests/test_notebooks.py` executes the same notebooks under pytest:
+
+```bash
+uv sync --extra test --extra notebooks
+uv run pytest -k notebooks
+```
+
+It skips when `nbclient` is absent from a basic test environment.
 
 ## Helpers
 
 - `_build.py` — regenerates the `.ipynb` files from the cells defined in the
-  script (the single source of truth for notebook content).
+  script (the single source of truth for notebook content). Pass notebook
+  filenames to regenerate only those; unchanged cells retain their IDs.
 - `_run.py` — executes the notebooks with `nbclient` and saves outputs.

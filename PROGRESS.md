@@ -14,9 +14,11 @@ Goal: HiGHS solvers, portable cloud-native build, headless Python CLI.
 - [x] macOS `protect()` score-buffer overflow + public import fixed (PR #4).
   Native PR #1 merged into `rewrite`; ASan and release checks in ARCHIVE.
 
-## Consolidation (2026-10-10)
-- Master PR #3 consolidated into `feature/dataframe-protect`, alongside PR #4.
-  Only PROGRESS conflicted; combined full suite: 218 passed, 3 optional skips.
+- [x] DataFrame examples in all three notebooks and both READMEs refreshed.
+  37 executed code cells; relative-workdir regression fixed; 219 tests pass.
+
+## Current review
+- Consolidated feature is ready for a controlled draft PR to `master`.
 
 ## Next (priority order)
 1. **GHCR rename → `tauargus-engine`** — 0.2.1 verified. Delete old

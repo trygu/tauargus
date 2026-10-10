@@ -343,3 +343,24 @@ the `.rda` writer. No `.tab`/`.hst` generator, no native `.hrc` getter
   are preserved. No native solver changes were needed for the tested workload.
 - Verification: **179 passed, 1 skipped** (nbclient absent), using the current
   Python sources with the native artifacts from the published 0.2.1 wheel.
+
+## DataFrame documentation and executable examples (2026-10-10)
+
+- Refreshed all three notebooks and their `_build.py` source around the public
+  `protect()` API: DataFrame quickstart, OPT/MOD and explicit audit, masked CSV,
+  multiple tables and `run=False` preview. Kept the lower-level batch examples.
+- Updated the root, Python binding and notebook READMEs. Documented retained
+  files, optional pandas, result accessors and the distinction between original
+  diagnostic values, protection levels, realized audit bounds and safe exports.
+  Corrected source-build order and the stale claim that no writer produces ASC.
+  Custom CSV examples now explicitly request output type 1.
+- Added pandas to the notebook extra. The runner consistently uses the notebook
+  directory, and selective regeneration preserves IDs of unchanged cells.
+- Executing the README examples exposed duplicated paths for relative
+  `workdir` values. Normalize the workdir to an absolute path before generating
+  batch inputs/outputs; a strict native subprocess regression fails before the
+  fix and passes afterward. All changes stay on `feature/dataframe-protect`.
+- Verification: **219 passed, 2 skipped** in the non-notebook suite (optional
+  polars checks); all three notebooks executed separately, **37 code cells**
+  with saved outputs and no cell errors. Both README examples ran in fresh
+  processes, notebook files validated, and all cell sources match `_build.py`.

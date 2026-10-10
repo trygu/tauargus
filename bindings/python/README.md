@@ -1,10 +1,11 @@
 # pytauargus
 
 Statistical disclosure control (SDC) for tabular data, as a Python package and
-a headless `tauargus` command. It runs legacy Tau-Argus 4.1 `.arb` batch files
-without the GUI and solves with the open-source
+a headless `tauargus` command. Protect tables directly from DataFrames with
+`protect()`, or run legacy Tau-Argus 4.1 `.arb` batch files without the GUI.
+The engine solves with the open-source
 [HiGHS](https://github.com/ERGO-Code/HiGHS) solver. Part of
-[tauargus-engine](https://github.com/trygu/tauargus).
+[tauargus-engine](https://github.com/trygu/tauargus-engine).
 
 ## Install
 
@@ -58,6 +59,44 @@ the table can be controlled-rounded. `tauargus` does this from a batch file.
 
 ## Quick start
 
+### From a DataFrame
+
+`protect()` is new on the development branch and awaits the next release.
+Follow the [source-build instructions](../../README.md#building-from-source),
+then run `uv sync --extra dataframe` here to add pandas support.
+
+```python
+import pandas as pd
+from pytauargus import protect
+
+micro = pd.DataFrame({
+    "Region": ["North"] * 6 + ["South"] * 6,
+    "Sector": ["Retail"] * 3 + ["Services"] * 3
+              + ["Retail"] * 3 + ["Services"] * 3,
+    "Turnover": [100., 5., 5., 10., 10., 10., 20., 20., 20., 30., 30., 30.],
+})
+result = protect(
+    micro, ["Region", "Sector"], response="Turnover",
+    safety_rules="NK(2,75)", suppress="OPT(1)", workdir="tauargus_run",
+)
+table = result.tables[0]
+publication = table.dataframe()[["Region", "Sector"]].copy()
+publication["Turnover"] = table.safe()
+publication.to_csv("protected.csv", index=False)
+print(publication)
+```
+
+Each row is one respondent. `NK(2,75)` flags cells whose two largest
+contributors exceed 75% of the response. The engine computes the crossing
+and totals, identifies primary unsafe cells, and adds secondary suppression.
+`protect()` coordinates microdata, metadata, batch generation and result parsing.
+
+Pandas is optional for the core API: column dicts, lists of row dicts and
+polars DataFrames are accepted too. `dataframe()` returns a pandas DataFrame
+when available, otherwise polars, otherwise a list of row dicts.
+
+### Existing batch files
+
 Put the data (`.asc`), its metadata (`.rda`) and a batch file in one folder.
 Paths in a batch file are relative to the working directory.
 
@@ -80,7 +119,7 @@ failing the dominance rule `NK(2,75)` (two largest contributors may not make up
 more than 75 %), applies secondary suppression with the modular method, and
 writes the protected table as code/value pairs, with suppressed values masked.
 The sample inputs are in the repository's
-[data/](https://github.com/trygu/tauargus-engine/tree/rewrite/data) folder.
+[data/](../../data/) folder.
 
 ## Batch file commands
 
@@ -145,6 +184,66 @@ INTERMEDIATE (type-5) audit file with the realized-interval columns.
 
 ## Python API
 
+### DataFrame protection
+
+```python
+from pytauargus import protect, ProtectResult, TableResult
+
+# Multiple tables; scalar options are recycled across them.
+result = protect(
+    micro, [["Region", "Sector"], ["Region"]], response="Turnover",
+    safety_rules="NK(2,75)", suppress="OPT(1)", workdir="multi_table_run",
+)
+assert isinstance(result, ProtectResult)
+assert all(isinstance(table, TableResult) for table in result.tables)
+```
+
+| Argument | Meaning |
+|----------|---------|
+| `tables` | A flat list of explanatory names for one table; a nested list for several |
+| `response` | Required numeric response column; a scalar or one name per table |
+| `safety_rules` | A rule string or per-table list; `None` supplies no rules |
+| `suppress` | Default `"OPT(1)"`; use `"MOD(1)"` for modular suppression. A single string gets each table's correct number |
+| `run=False` | Write `.asc`, `.rda`, `.arb` and return planned output paths without running the engine |
+| `workdir` | Retained directory, resolved from the caller's working directory; returned paths are absolute. Defaults to a new temporary directory |
+
+Metadata and table options include `weight_var`, `weighted`, `holding_var`,
+`decimals`, `hrc`, `totcode`, `missing` and `codelist`; see `help(protect)`.
+The high-level API requires a numeric response column; frequency-only tables
+using the batch `<freq>` response use the lower-level API.
+
+`ProtectResult` contains `.tables` in input order, `.engine` after the batch,
+`.files` (`asc`, `rda`, `arb`, `tab1`, …) and `.workdir`. With `run=False`,
+`.tables` is empty and `.engine` is `None`; the planned `.tab` files are not
+created by that call. Files persist so callers can inspect them and choose
+when to remove them.
+
+| `TableResult` accessor | Returns |
+|------------------------|---------|
+| `safe(unsafe_marker="x")` | Response values with primary `U` and secondary `M` cells masked |
+| `status()` | One `S`, `U`, `P`, `M` or `E` symbol per cell |
+| `unsafe()` | Original, unmasked responses for analysis |
+| `dataframe()` | Full diagnostic rows, including original responses |
+| `n_cells`, `columns`, `rows`, `response` | Result shape, rows and response name |
+
+Use the explanatory columns plus `safe()` to construct the publication table,
+as in the quickstart. `dataframe()` does not mask the response automatically.
+`safe(None)` uses missing values instead of `x`.
+
+Audit is explicit and engine indices are zero-based:
+
+```python
+rows = result.engine.audit(0)  # realized min/max and insufficient-protection flag
+result.engine.write_intermediate_table(0, "audit.tab", with_audit=True)
+```
+
+The `lower` / `upper` columns in the default result are protection levels;
+realized bounds are returned by `audit()`. `TableResult` is a parsed snapshot
+and does not refresh when the engine is audited or modified. Raw intermediates
+and audit reports contain original values and belong with analyst artifacts.
+
+### Existing batches and individual commands
+
 ```python
 from pytauargus.engine import run_batch
 
@@ -170,13 +269,16 @@ micro_arb(
     safety_rules=["NK(1,85)", "FREQ(3,10)"],
     suppress="GH(.,100)",
     output_names=["tab1.csv", "tab2.csv"],
+    output_type="1",  # CSV; the generator default is SBS/type 4
 )
 ```
 
-`micro_arb` writes a `.arb` batch; `pytauargus.hrc.write_hrc` writes `.hrc`
-hierarchy files and `pytauargus.rda.write_rda` writes `.rda` metadata text.
-The generator does not produce the fixed-width `.asc` microdata file itself;
-it references that file by name.
+`pytauargus.micro.micro_asc_rda` writes the fixed-width `.asc` file and its
+`.rda` metadata. `micro_arb` references those files and writes a `.arb` batch.
+`pytauargus.hrc.write_hrc` writes `.hrc` hierarchy files; the separate
+`pytauargus.rda.write_rda` writer handles metadata text. `protect()` coordinates
+these steps automatically; `protect(..., run=False)` previews the complete
+generated pipeline without running it.
 
 ## Example notebooks
 
@@ -185,11 +287,12 @@ as API documentation (every code cell runs against the verified public API):
 
 | Notebook | Covers |
 |----------|--------|
-| [`01_quickstart`](notebooks/01_quickstart.ipynb) | import, the test data, `parse_rda`/`Metadata`, `run_batch`, table + cell inspection |
-| [`02_protection_and_audit`](notebooks/02_protection_and_audit.ipynb) | safety rules → OPT/MOD/RND suppression → status distribution → `audit()` realized intervals (Intervalle) → export |
-| [`03_generators`](notebooks/03_generators.ipynb) | `micro_arb`, `write_rda`/`rda_text`, `write_hrc`, generate→run round-trip |
+| [`01_quickstart`](notebooks/01_quickstart.ipynb) | DataFrame → `protect()` → `TableResult` → masked CSV, then metadata and existing batches |
+| [`02_protection_and_audit`](notebooks/02_protection_and_audit.ipynb) | OPT/MOD DataFrame protection, explicit audit and masked export; batch OPT/MOD/RND |
+| [`03_generators`](notebooks/03_generators.ipynb) | `run=False` file preview, multiple tables, individual writers and custom batch round-trip |
 
-Run them interactively, or headless (the same command CI could use):
+Run them interactively, or headless (the same command CI could use).
+The `notebooks` extra includes pandas for the DataFrame examples:
 
 ```bash
 # interactive
