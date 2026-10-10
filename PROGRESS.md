@@ -24,8 +24,9 @@ Goal: HiGHS solvers, portable cloud-native build, headless Python CLI replacing 
 2. **Top-level project rename** (repo/package naming) — decide + execute later.
 3. Task 1: document solver strategy (legacy roles → HiGHS); Dockerfile.
 4. **ANSI-TUI design tightened** (`docs/ui-design.md`): Option A (headless
-   CLI) is the product; Option B = `textual` TUI scoped (layout/keymap/
-   feature->API map, preview = fresh-run diff). Task 8 unblocked either way.
+   CLI) is the product; Option B = `textual` TUI as **own PyPI package
+   `pytauargus-tui`** (`bindings/tui/`, script `tauargus-tui`). Task 8
+   unblocked either way; TUI later on `feat/ansi-ui`.
 
 ## Watch items
 - OPT/MOD nonzero `max_time` → deterministic native segfault (solver

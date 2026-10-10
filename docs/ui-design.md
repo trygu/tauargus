@@ -50,11 +50,21 @@ break the terminal, the main risk with a home-rolled `rich` grid).
 `rich` + `prompt_toolkit` is the fallback if we want fewer moving parts, but
 it forces us to hand-wire pane layout and focus; `textual` gives that for free.
 
-It is an **optional extra**, not a core dependency, so the release wheel stays
-minimal:
-`[project.optional-dependencies] tui = ["textual>=0.50"]`, exposed as a new
-`tauargus gui` subcommand that lazily imports `textual` and fails with a clear
-"install the `tui` extra" message when absent.
+**Distribution: its own PyPI package, `pytauargus-tui`** (decided). It is a
+separate project — its own `pyproject.toml`, version, wheel, and release
+cadence — but **lives in this monorepo** (`bindings/tui/`, sibling to
+`bindings/python/`) and is developed on its **own branch** while in flight, so:
+- the core `pytauargus` wheel stays minimal — `textual` is never a dependency
+  of it (no extra, no subcommand in the core `tauargus` CLI);
+- the TUI can move (features, breaking UI changes) without bumping the engine
+  release;
+- `pip install pytauargus-tui` pulls `pytauargus>=<min>` (the native engine +
+  CLI) as its only engine dependency.
+
+- Console script: `tauargus-tui` (distinct from the core `tauargus` CLI).
+- Depends on: `pytauargus>=0.2.1`, `textual>=0.50`.
+- Release: its own tag scheme (e.g. `tui-v*`) + wheel; can reuse the existing
+  `wheels.yml` pattern once the layout is proven.
 
 ### B.1 Layout
 
@@ -142,24 +152,25 @@ promising an undo it does not have.
 
 1. **Ship the product as Option A.** The headless CLI is the complete
    product; do not gate it on a UI.
-2. **Build Option B as a dedicated task on its own branch** *after* the engine
-   features (apriori/cover) and packaging are stable, so the UI sits on a
-   quiet base. It is now fully specified above (library = `textual`, layout,
-   keymap, feature→API map, preview semantics) and is ready to implement.
+2. **Build Option B as a dedicated task on its own branch, shipped as its own
+   PyPI package `pytauargus-tui`** *after* the engine features (apriori/cover)
+   and packaging are stable, so the UI sits on a quiet base. It is now fully
+   specified above (library = `textual`, layout, keymap, feature→API map,
+   preview semantics) and is ready to implement.
 3. **Unblock Task 8 now.** Swing does not need a 1:1 replacement to be
    deleted. If the team wants a UI, Option B is it; if not, delete Swing
    outright and revisit B later.
 
 ## 4. Split-out requirement (Option B)
 
-The UI is **its own task and its own branch**, independent of the native
-engine port and of packaging:
-- Branch: `feat/ansi-ui` (or a separate repo, if preferred).
-- Depends on: the `pytauargus` package (engine + pybind) as a library, plus
-  the optional `tui` extra (`textual`).
+The UI is **its own task, its own branch, and its own PyPI package**
+(`pytauargus-tui`), independent of the native engine port and of core
+packaging:
+- Branch: `feat/ansi-ui` (in this monorepo); source lives in `bindings/tui/`.
+- Distribution: `pytauargus-tui` — its own `pyproject.toml`/version/**wheel**;
+  depends on `pytauargus>=<min>` + `textual`; console script `tauargus-tui`.
 - Does not touch: `engine/native/*`, the batch parser, or solver backends.
-- Entry point: `tauargus gui` subcommand; lazy `textual` import; core wheel
-  unchanged.
+  The core `pytauargus` wheel and CLI are unchanged by the TUI.
 - Acceptance: drives a real `.arb` end-to-end in the terminal —
   specify → compute → preview suppress/round → save — and produces the same
   outputs and the same status-count deltas as the CLI and the smoke tests.
