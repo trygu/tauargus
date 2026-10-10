@@ -14,7 +14,7 @@ tauargus --version
 ```
 
 Wheels bundle HiGHS and the native engine; no other installation is needed.
-Available for Python 3.10-3.13 on macOS arm64, Linux x86_64 (manylinux_2_28) and
+Available for Python 3.10-3.13 on macOS arm64, Linux x86_64 and aarch64 (manylinux_2_28) and
 Windows x64. Other platforms: build from source (see the repository).
 
 ## Cloud native
@@ -33,7 +33,7 @@ Built to run unattended in containers, CI and batch services:
   as `python:3.x-slim`), macOS arm64 and Windows x64.
 
 A ready-made image is published to GitHub Container Registry with each release
-(Linux x86_64):
+(linux/amd64 and linux/arm64):
 
 ```bash
 docker run --rm -v "$PWD":/work ghcr.io/trygu/tauargus run batch.arb

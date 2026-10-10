@@ -38,10 +38,10 @@ They are built for Python 3.10-3.13 on:
 | Platform | Architecture |
 |----------|--------------|
 | macOS    | arm64 (Apple Silicon) |
-| Linux (manylinux_2_28) | x86_64 |
+| Linux (manylinux_2_28) | x86_64, aarch64 |
 | Windows  | x64 |
 
-Intel Macs, Linux ARM and Windows ARM are not built, and there is no source
+Intel Macs and Windows ARM are not built, and there is no source
 distribution; on those platforms see [Building from source](#building-from-source).
 The same wheels are attached to each
 [GitHub Release](https://github.com/trygu/tauargus/releases).
@@ -62,7 +62,7 @@ Built to run unattended in containers, CI and batch services:
   as `python:3.x-slim`), macOS arm64 and Windows x64.
 
 A ready-made image is published to GitHub Container Registry with each release
-(Linux x86_64):
+(linux/amd64 and linux/arm64):
 
 ```bash
 docker run --rm -v "$PWD":/work ghcr.io/trygu/tauargus run batch.arb
