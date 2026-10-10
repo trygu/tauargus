@@ -33,6 +33,9 @@ Branch: `rewrite`
 - GitHub CI run 38072531248 passes macOS 15, Ubuntu x86_64 and Ubuntu ARM64.
   Fix submitted as tauargus-engine PR #4 to `feature/dataframe-protect`;
   core capacity-query addition is libtauargus PR #1 (pin `5f913c95`).
+- Both PRs merged: native #1 into `rewrite` (`b75aabe2`), engine #4 into
+  `feature/dataframe-protect` (`746bc115`). Temporary fix branches removed;
+  subsequent fixes use the active feature branch directly.
 
 ## Original goals
 1. Port to the open source solver and make it cloud native and portable

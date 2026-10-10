@@ -1,7 +1,7 @@
 # Tau-Argus Rewrite — Progress
 
 Branches: `master` (mainline) + `tui` (TUI). This work is on
-`fix/dataframe-protect-abort`, based on `feature/dataframe-protect`.
+`feature/dataframe-protect`; fixes stay on the active feature branch.
 Goal: HiGHS solvers, portable cloud-native build, headless Python CLI.
 
 ## Verified checkpoints (details in ARCHIVE.md)
@@ -11,13 +11,14 @@ Goal: HiGHS solvers, portable cloud-native build, headless Python CLI.
 - [x] **High-level API — DataFrame `protect()`** (2026-10-10, this branch):
   DataFrame/dict -> native batch -> type-5 `TableResult`; optional pandas.
 
-## Current fix (2026-10-10; PR #4 to feature/dataframe-protect)
+## Verified fix (2026-10-10; PR #4 merged into feature/dataframe-protect)
 - macOS `protect()` abort: ASan confirmed native score-buffer overflow in
   Python binding. Allocate from native table capacities; no crash retries.
 - Public `protect` import recursion fixed. Plain/weighted/holding regression
   cases: 11 pass with ASan; 216 pass, 3 skip in full release-build suite.
 - Original input: 60 fresh-process runs clean under ASan and 60 in release.
 - CI run 38072531248: macOS, Linux x86_64 and Linux ARM64 all pass.
+- Native PR #1 merged into `rewrite`; temporary fix branches removed.
 
 ## Next (priority order)
 1. **GHCR rename → `tauargus-engine`** — 0.2.1 verified. Delete old
