@@ -71,4 +71,4 @@ Port SDC tool to HiGHS solver, portable cloud-native build, and headless Python 
   4. `git tag py-vX.Y.Z && git push origin py-vX.Y.Z`.
   5. Watch the run: `gh run list --workflow wheels --limit 1`.
 - Wheels: macOS arm64, Linux x86_64+aarch64 (manylinux_2_28), Windows x64; Python 3.10-3.13.
-- The image is `ghcr.io/trygu/tauargus:<version>` and `:latest`.
+- The image is `ghcr.io/trygu/tauargus-engine:<version>` and `:latest`.

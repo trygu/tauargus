@@ -18,8 +18,9 @@ Goal: HiGHS solvers, portable cloud-native build, headless Python CLI replacing 
   fixed (R `strsplit` = regex, applied per block). 177 tests green.
 
 ## Next (priority order)
-1. **GHCR package rename → `tauargus-engine`** (user request): delete the
-   existing `tauargus` images, republish under the new name.
+1. **GHCR package rename → `tauargus-engine`** (user request, in flight):
+   0.2.1 re-release pushes `ghcr.io/trygu/tauargus-engine`; then run
+   `delete-old-gcr.yml` to remove `trygu/tauargus` from GHCR.
 2. **Top-level project rename** (repo/package naming) — decide + execute later.
 3. Task 1: document solver strategy (legacy roles → HiGHS); Dockerfile.
 4. ANSI-UI decision (`docs/ui-design.md`); Task 8 blocked on it.
