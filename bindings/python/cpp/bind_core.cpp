@@ -209,8 +209,11 @@ void init_core(py::module_ &m) {
             double key = 0, key_nz = 0, peep_cell = 0, peep_holding = 0;
             double lower = 0, upper = 0, rlower = 0, rupper = 0;
             long freq = 0, status = 0, holding_freq = 0;
-            std::vector<double> ms(msz, 0.0), msw(msz, 0.0), hms(msz, 0.0);
-            std::vector<long> hnr(msz, 0);
+            // The engine writes nMaxScore* entries regardless of `topn`;
+            // keep slack so a short request cannot overflow the buffers.
+            const size_t cap = (size_t)msz + 64;
+            std::vector<double> ms(cap, 0.0), msw(cap, 0.0), hms(cap, 0.0);
+            std::vector<long> hnr(cap, 0);
             long peep_sort_cell = 0, peep_sort_holding = 0;
             bool ok = n > 0 && t.GetTableCell(
                     tab, d.data(), &resp, &rresp, &cta, &ckm, &shadow, &cost,
@@ -219,6 +222,7 @@ void init_core(py::module_ &m) {
                     &peep_holding, &peep_sort_cell, &peep_sort_holding, &lower,
                     &upper, &rlower, &rupper);
             if (!ok) return py::make_tuple(false);
+            ms.resize(msz); msw.resize(msz); hms.resize(msz); hnr.resize(msz);
             return py::make_tuple(true, resp, rresp, cta, ckm, shadow, cost,
                                    key, key_nz, freq, status, ms, msw,
                                    holding_freq, hms, hnr, peep_cell,
