@@ -16,15 +16,24 @@ The project has two parts:
 
 ## Install
 
-Download a wheel for your platform from the
-[GitHub Releases](https://github.com/trygu/tauargus/releases) page, then:
+From [PyPI](https://pypi.org/project/pytauargus/):
 
 ```bash
-uv tool install ./pytauargus-*.whl     # or: pipx install ./pytauargus-*.whl
+pip install pytauargus          # into the current environment
+uv tool install pytauargus      # or: pipx install pytauargus (isolated, puts `tauargus` on PATH)
 tauargus --version
 ```
 
-Wheels are built for Python 3.10–3.13 on:
+Use it from Python as well:
+
+```python
+from pytauargus.engine import run_batch
+
+run_batch("mybatch.arb")
+```
+
+Wheels bundle HiGHS and the engine libraries, so nothing else needs installing.
+They are built for Python 3.10-3.13 on:
 
 | Platform | Architecture |
 |----------|--------------|
@@ -32,8 +41,10 @@ Wheels are built for Python 3.10–3.13 on:
 | Linux (manylinux_2_28) | x86_64 |
 | Windows  | x64 |
 
-Intel Macs, Linux ARM and Windows ARM are not built. Wheels are also published to PyPI
-when the maintainers enable it; otherwise use the Releases page.
+Intel Macs, Linux ARM and Windows ARM are not built, and there is no source
+distribution; on those platforms see [Building from source](#building-from-source).
+The same wheels are attached to each
+[GitHub Release](https://github.com/trygu/tauargus/releases).
 
 ## Quick start
 
