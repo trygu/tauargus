@@ -410,3 +410,15 @@ the `.rda` writer. No `.tab`/`.hst` generator, no native `.hrc` getter
 - Verification: **255 Python tests passed, 2 optional polars skips**, plus
   **3 saved-notebook checks passed**. Both README examples execute in fresh
   processes, notebook files validate, and their sources match `_build.py`.
+
+## Release 0.3.0 preparation (2026-10-10)
+
+- PR #5 merged to master (`4457752`); mainline CI passed on all three runners.
+- Bumped package and lock from 0.2.1 to 0.3.0 for the new DataFrame API.
+  Updated wheel/container version guidance and removed unreleased API wording
+  from the binding README, notebook README, generator, and quickstart notebook.
+- `uv lock`, editable package build, and full `uv run --no-sync pytest` passed
+  in the existing test environment, including all three executable notebooks.
+  Native `cell_buffer_sizes` CTest passed; notebook sources match the generator.
+- The first fresh-environment sync was stopped after stalled downloads; the
+  existing environment was synced with test extras and rebuilt as 0.3.0.
