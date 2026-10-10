@@ -12,7 +12,10 @@ compiled extension ``pytauargus._tauargus``.
 from ._tauargus import TauArgus, HiTaSCtrl, RounderCtrl  # noqa: F401
 
 __version__ = "0.1.0"
-__all__ = ["TauArgus", "HiTaSCtrl", "RounderCtrl", "Engine", "__version__"]
+__all__ = [
+    "TauArgus", "HiTaSCtrl", "RounderCtrl", "Engine",
+    "write_hrc", "HrcError", "__version__",
+]
 
 
 def __getattr__(name):
@@ -21,4 +24,8 @@ def __getattr__(name):
         from .engine import Engine
 
         return Engine
+    if name in ("write_hrc", "HrcError"):
+        from . import hrc
+
+        return getattr(hrc, name)
     raise AttributeError(name)
