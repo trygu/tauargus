@@ -23,7 +23,9 @@ Goal: HiGHS solvers, portable cloud-native build, headless Python CLI replacing 
    `delete-old-gcr.yml` to remove `trygu/tauargus` from GHCR.
 2. **Top-level project rename** (repo/package naming) — decide + execute later.
 3. Task 1: document solver strategy (legacy roles → HiGHS); Dockerfile.
-4. ANSI-UI decision (`docs/ui-design.md`); Task 8 blocked on it.
+4. **ANSI-TUI design tightened** (`docs/ui-design.md`): Option A (headless
+   CLI) is the product; Option B = `textual` TUI scoped (layout/keymap/
+   feature->API map, preview = fresh-run diff). Task 8 unblocked either way.
 
 ## Watch items
 - OPT/MOD nonzero `max_time` → deterministic native segfault (solver
