@@ -17,8 +17,10 @@ portable cloud-native build, headless Python CLI.
 - [x] `app.py` Textual app (textual 8.x): navigator + grid (status colours) +
   cell detail (value/status/interval) + log line; j/k table switch; s=OPT,
   r=RND, a=audit, o=save `.tab`. 13 tests green (7 model + 6 Pilot).
-- [ ] Next: preview-delta for suppress/round (fresh run + status-count diff,
-  design §B.3); spec editing / `.arb` emission; own tag scheme `tui-v*`.
+- [x] **Human-verified in a real terminal** (2026-10-11): load, grid, detail.
+- [ ] Next: (1) file-picker startup (no-arg launch, `FilePicker` for `*.arb`);
+  (2) preview-delta for suppress/round (fresh run + status-count diff, §B.3);
+  (3) spec editing / `.arb` emission; own tag scheme `tui-v*`.
 - Dev: `bindings/tui/.venv` (py3.13) on the released `pytauargus==0.3.0`
   wheel; `.venv/bin/python -m pytest`.
 - Note: `pytauargus.__init__.__version__` is stale (0.2.1) in the 0.3.0 tree.
