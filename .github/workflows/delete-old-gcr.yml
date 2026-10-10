@@ -35,11 +35,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          # find the exact package by name (skip the -engine one)
+          # diagnostics: what does the API actually return?
+          gh api "/user/packages?package_type=docker&per_page=100" \
+            | python3 -c "import sys,json; d=json.load(sys.stdin); print('count:', len(d)); [print(' name=', repr(p['name']), 'id=', p['id']) for p in d]"
+          # find the package: name ends in 'tauargus' (any namespace form),
+          # and is not the -engine replacement
           id=""
           for page in 1 2 3; do
             hit=$(gh api "/user/packages?package_type=docker&per_page=100&page=$page" \
-              --jq '.[] | select(.name | sub("^trygu/";"") == "tauargus") | .id')
+              --jq '.[] | select(.name | test("tauargus$")) | .id')
             [ -n "$hit" ] && id=$hit && break
           done
           [ -n "$id" ] || { echo "package trygu/tauargus not found (already deleted?)"; exit 0; }
