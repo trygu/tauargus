@@ -352,7 +352,7 @@ nb2 = [
         "consistent with the published totals — its **realized lower/upper",
         "bounds** (the *feasibility interval*). Protection requires sufficient",
         "uncertainty to meet the configured protection requirements; a narrow",
-        "interval can reveal the value. In legacy Tau-Argus audit ran in a **separate**",
+        "interval can reveal the value. In legacy Tau-Argus the audit ran in a **separate**",
         "`intervalle.exe`; the rewrite ports it into the engine (`TauAuditJj`",
         "in the `csp` submodule), so it runs **in-process** over a temporary",
         "`.JJ` file with nothing external to install.",
