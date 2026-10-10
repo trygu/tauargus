@@ -279,3 +279,27 @@ the `.rda` writer. No `.tab`/`.hst` generator, no native `.hrc` getter
   applied per block vector then unlist-ed, not a literal `str.split` on the
   joined string. Now splits each block with `re` and flattens.
 - After fixes: 177 passed, 1 skipped (the notebook test without nbclient).
+
+## Positive solver time limits + audit documentation (2026-10-10)
+
+- The previous claim that every nonzero OPT/MOD `max_time` deterministically
+  segfaults was not reproduced with the published 0.2.1 wheel on macOS arm64,
+  CPython 3.13. Both methods completed with a one-minute limit on a small
+  synthetic table and on `data/TestRecode.arb`, three fresh engines per method
+  in the same process. Secondary suppression counts increased on every run.
+- `tests/test_solver_time_limits.py` covers OPT and MOD with positive limits
+  on TestRecode. Each test runs three fresh engines in a child process, so a
+  native crash fails the test without killing pytest. It explicitly covers
+  accepting a finite limit, not reaching the deadline or concurrent use.
+- Replaced stale crash warnings in notebook 02/03 and their `_build.py`
+  source with the units (minutes) and the meaning of `0` (no limit).
+- Corrected the reversed audit explanation in both READMEs and notebook 02:
+  protection requires sufficient uncertainty relative to the protection
+  requirements; a narrow interval can disclose the value. The original value
+  normally lies inside the feasibility interval. Documented the audit's
+  `unsafe` flag as its insufficient-protection check and `value` as the original
+  cell value withheld from the release table.
+- Notebook edits affect Markdown only; code, execution counts and saved outputs
+  are preserved. No native solver changes were needed for the tested workload.
+- Verification: **179 passed, 1 skipped** (nbclient absent), using the current
+  Python sources with the native artifacts from the published 0.2.1 wheel.

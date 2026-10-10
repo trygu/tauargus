@@ -190,9 +190,10 @@ input data + metadata
 
 After suppression, each suppressed cell still has a *range* of values it could
 take and stay consistent with the published totals: its **realized lower and
-upper bounds** (the *feasibility interval*). A suppressed cell is only truly
-protected if that interval is small enough that the original value is no longer
-reconstructible; a wide interval means the cell is still effectively *unsafe*.
+upper bounds** (the *feasibility interval*). Protection requires sufficient
+uncertainty to meet the configured protection requirements. A narrow interval
+can reveal the original value or constrain it too closely; interval width alone
+does not establish protection. The audit checks for insufficient protection.
 
 In legacy Tau-Argus this was a **separate program** — `intervalle.exe`, a
 standalone Delphi/Pascal executable. Tau-Argus wrote a `.JJ` file, launched the

@@ -118,10 +118,12 @@ so it fits into scripts and pipelines.
 
 ## Audit (Intervalle)
 
-A suppressed cell is only protected if the range of values it could take and
-stay consistent with the published totals — its **realized lower/upper bounds**,
-the *feasibility interval* — is small enough that the original value can no
-longer be reconstructed.
+A suppressed cell has a range of values it could take while staying consistent
+with the published totals — its **realized lower/upper bounds**, the
+*feasibility interval*. Protection requires sufficient uncertainty to meet the
+configured protection requirements. A narrow interval can reveal the original
+value or constrain it too closely; interval width alone does not establish
+protection. The audit checks for insufficient protection.
 
 In legacy Tau-Argus this ran in a **separate** `intervalle.exe` (standalone
 Delphi/Pascal executable); Tau-Argus wrote a `.JJ` file, launched it externally
