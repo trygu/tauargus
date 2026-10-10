@@ -82,7 +82,7 @@ A ready-made image is published to GitHub Container Registry with each release
 docker run --rm -v "$PWD":/work ghcr.io/trygu/tauargus run batch.arb
 ```
 
-Pin a version with `ghcr.io/trygu/tauargus:0.1.1`. To build your own image:
+Pin a version with `ghcr.io/trygu/tauargus:0.2.0`. To build your own image:
 
 ```dockerfile
 FROM python:3.12-slim
@@ -116,6 +116,31 @@ Sample batches and fixtures are in [data/](data). The batch grammar, file
 formats and parameters follow the legacy Tau-Argus 4.1 manual, which is bundled
 in [docs/](docs).
 
+## Writing batch inputs
+
+Beyond running batches, `pytauargus` can *generate* them. The generator is a
+port of [rtauargus](https://github.com/InseeFrLab/rtauargus), the R wrapper, so
+it emits the exact file formats the engine reads:
+
+```python
+from pytauargus.arb import micro_arb
+
+# writes a .arb batch: two tables (REGION, then SEXE) of the response var CA
+micro_arb(
+    asc_filename="donnees.asc",
+    explanatory_vars=[["REGION"], ["SEXE"]],
+    response_var="CA",
+    safety_rules=["NK(1,85)", "FREQ(3,10)"],
+    suppress="GH(.,100)",
+    output_names=["tab1.csv", "tab2.csv"],
+)
+```
+
+`pytauargus.hrc.write_hrc` produces `.hrc` hierarchy files and
+`pytauargus.rda.write_rda` writes `.rda` metadata text. The generator does not
+produce the fixed-width `.asc` microdata file itself (that step stays in your
+pipeline); it references it by name.
+
 ## What it does
 
 SDC reduces the risk that published tables disclose information about
@@ -137,6 +162,33 @@ input data + metadata
   -> protect: secondary suppression + audit, or controlled rounding
   -> write release table + report
 ```
+
+## Audit (Intervalle)
+
+After suppression, each suppressed cell still has a *range* of values it could
+take and stay consistent with the published totals: its **realized lower and
+upper bounds** (the *feasibility interval*). A suppressed cell is only truly
+protected if that interval is small enough that the original value is no longer
+reconstructible; a wide interval means the cell is still effectively *unsafe*.
+
+In legacy Tau-Argus this was a **separate program** — `intervalle.exe`, a
+standalone Delphi/Pascal executable. Tau-Argus wrote a `.JJ` file, launched the
+executable externally, and read the intervals back. The operator had to install
+it and keep it on the path, so it was the one part of the pipeline that did not
+run in-process.
+
+The rewrite folds it in: the audit logic is ported into the `csp` engine module
+(`TauAuditJj`), so it runs in-process over a temporary `.JJ` file and needs
+nothing external. Use it three ways:
+
+- **CLI:** `tauargus audit mybatch.arb` — compute, suppress, then report each
+  suppressed cell's realized interval and whether it is still unsafe.
+- **Python:** `engine.audit(tab)` — returns one row per suppressed cell
+  (`cell`, `min`, `max`, `value`, `status`, `unsafe`); the realized bounds are
+  also stored on the table and readable via `get_table_cell`.
+- **Export:** `tauargus save mybatch.arb --audit --format intermediate` writes
+  the legacy INTERMEDIATE (type-5) audit file, including the realized-interval
+  columns.
 
 ## Architecture
 

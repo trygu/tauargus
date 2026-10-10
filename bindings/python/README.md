@@ -39,7 +39,7 @@ A ready-made image is published to GitHub Container Registry with each release
 docker run --rm -v "$PWD":/work ghcr.io/trygu/tauargus run batch.arb
 ```
 
-Pin a version with `ghcr.io/trygu/tauargus:0.1.1`. To build your own image:
+Pin a version with `ghcr.io/trygu/tauargus:0.2.0`. To build your own image:
 
 ```dockerfile
 FROM python:3.12-slim
@@ -116,6 +116,31 @@ tauargus version
 Exit code is 0 on success and non-zero on an error, with a message on stderr,
 so it fits into scripts and pipelines.
 
+## Audit (Intervalle)
+
+A suppressed cell is only protected if the range of values it could take and
+stay consistent with the published totals — its **realized lower/upper bounds**,
+the *feasibility interval* — is small enough that the original value can no
+longer be reconstructed.
+
+In legacy Tau-Argus this ran in a **separate** `intervalle.exe` (standalone
+Delphi/Pascal executable); Tau-Argus wrote a `.JJ` file, launched it externally
+and read the intervals back. The rewrite ports that logic into the engine
+(`TauAuditJj` in the `csp` module), so it runs in-process over a temporary
+`.JJ` file with nothing external to install:
+
+```python
+from pytauargus.engine import run_batch
+
+engine = run_batch("demo.arb")
+rows = engine.audit(0)   # one dict per suppressed cell:
+# {"cell", "min", "max", "value", "status", "unsafe"}
+```
+
+The realized bounds are stored on the table (readable via `get_table_cell`).
+`tauargus save demo.arb --audit --format intermediate` writes the legacy
+INTERMEDIATE (type-5) audit file with the realized-interval columns.
+
 ## Python API
 
 ```python
@@ -126,6 +151,30 @@ engine = run_batch("demo.arb")   # parse and execute; returns the Engine
 
 Lower-level pieces: `pytauargus.batch.parse_batch(path)` returns the parsed
 command list, and `pytauargus.engine.Engine` executes commands one at a time.
+
+## Generating batch inputs
+
+`pytauargus` also *writes* the batch inputs, as a port of
+[rtauargus](https://github.com/InseeFrLab/rtauargus), so it emits the exact
+formats the engine reads:
+
+```python
+from pytauargus.arb import micro_arb
+
+micro_arb(
+    asc_filename="donnees.asc",
+    explanatory_vars=[["REGION"], ["SEXE"]],
+    response_var="CA",
+    safety_rules=["NK(1,85)", "FREQ(3,10)"],
+    suppress="GH(.,100)",
+    output_names=["tab1.csv", "tab2.csv"],
+)
+```
+
+`micro_arb` writes a `.arb` batch; `pytauargus.hrc.write_hrc` writes `.hrc`
+hierarchy files and `pytauargus.rda.write_rda` writes `.rda` metadata text.
+The generator does not produce the fixed-width `.asc` microdata file itself;
+it references that file by name.
 
 ## License
 

@@ -26,8 +26,11 @@ Goal: HiGHS solvers, portable cloud-native build, headless Python CLI replacing 
   174 tests green; validated vs base-R ground truth. Details in ARCHIVE.md.
 
 ## Next (priority order)
-1. Validate Linux/Windows legs of wheels.yml in CI; publish first release.
-2. Task 1: document solver strategy (legacy roles → HiGHS); Dockerfile.
+1. **Release 0.2.0 in flight** (2026-10-10): `.arb`/`.rda` writers + README
+   (generator + Intervalle/audit sections). Tag `py-v0.2.0` -> wheels.yml ->
+   GH Release + PyPI + GHCR. 0.1.0 already published (immutable).
+2. Validate Linux/Windows/aarch64 legs of wheels.yml on the 0.2.0 CI run.
+3. Task 1: document solver strategy (legacy roles → HiGHS); Dockerfile.
 3. **ANSI-UI (SPLIT OUT, `docs/ui-design.md`)**: TUI vs headless-CLI-only (rec: headless).
 4. Task 8 (BLOCKED on #3): keep `src/` Java until UI decision.
 
