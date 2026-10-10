@@ -46,6 +46,34 @@ distribution; on those platforms see [Building from source](#building-from-sourc
 The same wheels are attached to each
 [GitHub Release](https://github.com/trygu/tauargus/releases).
 
+## Cloud native
+
+Built to run unattended in containers, CI and batch services:
+
+- **Headless:** no GUI, no display, no interactive prompts.
+- **Self-contained:** one `pip install`; the solver (HiGHS) and native libraries
+  are bundled in the wheel. No licensed solver, license server, system packages
+  or Windows registry.
+- **Stateless:** input and output are plain files in the working directory;
+  scratch files go to the system temp directory.
+- **Scriptable:** success is exit code 0; errors go to stderr with a non-zero
+  exit code.
+- **Portable:** wheels for Linux (manylinux_2_28, so any glibc 2.28+ image such
+  as `python:3.x-slim`), macOS arm64 and Windows x64.
+
+Example container image:
+
+```dockerfile
+FROM python:3.12-slim
+RUN pip install --no-cache-dir pytauargus
+WORKDIR /work
+ENTRYPOINT ["tauargus"]
+```
+
+```bash
+docker run --rm -v "$PWD":/work my-tauargus run batch.arb
+```
+
 ## Quick start
 
 ```bash
