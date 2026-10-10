@@ -33,3 +33,6 @@ Goal: HiGHS solvers, portable cloud-native build, headless Python CLI replacing 
   2026-10-07, column-0 RHS sentinel — see `docs/native-debugging.md`.)
 - `open_microdata` calls `clean_all` — safe only because tables finalize after.
 - Parquet as the microdata dataframe backend (not started).
+- **Reference added: `piargus`** (`references/piargus`, lverweijen) — Python
+  τ-ARGUS wrapper; study how our `pytauargus` aligns with its API/flow
+  (transient reference, drop after alignment review).
