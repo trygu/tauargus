@@ -5,6 +5,32 @@ Historical/completed state, extracted from `PROGRESS.md` on 2026-10-06
 
 Branch: `rewrite`
 
+## DataFrame API checkpoint (2026-10-10)
+- `protect(df|dict, tables, response, ...)` writes microdata/metadata/batch and
+  reads type-5 `SO+` output into `TableResult`; `run=False` writes inputs only.
+- `Variable.is_numeric` excludes categorical variables to avoid native
+  `ConvertNumeric` errors (`ISNOTNUMERIC`, 1018) on categorical codes.
+- Initial branch verification reported 213 passed, 3 skipped. Its subprocess
+  test accepted JSON even on a crash and retried signal failures; subsequent
+  macOS CI exposed an abort, so that result did not establish memory safety.
+
+## DataFrame native abort diagnosis and fix (2026-10-10)
+- CI run 38071022820, macOS job 114268275994 failed in the full `protect()`
+  subprocess with SIGABRT. The same input reproduced a SIGSEGV locally,
+  sometimes after output, during Python GC.
+- ASan identified an 8-byte write just after a 520-byte allocation in
+  `TauArgus::GetTableCell`, called by `bind_core.cpp`: the default request
+  allocated 1 + 64 scores, but `P(25,1000)` configured 1000 native scores.
+- Core adds `GetTableCellBufferSizes`; binding allocates cell, weighted and
+  holding buffers from the effective table counts before trimming to `topn`.
+  Validate dimension count before passing its index buffer to native code.
+- Removed retries and JSON-only success from the regression. Child failures
+  always fail the test, with faulthandler enabled and a bounded timeout.
+- Fixed separate fresh-import recursion in `from pytauargus import protect`.
+- Before fix: plain/weighted/holding regressions fail under ASan. After fix:
+  11 protect tests pass under ASan; original input passes 60 fresh processes
+  under ASan and 60 with release libs; full suite: 216 passed, 3 optional skips.
+
 ## Original goals
 1. Port to the open source solver and make it cloud native and portable
 2. Clean up the code

@@ -5,8 +5,7 @@ Split by native-engine risk:
 * ``run=False`` (write the ``.asc``/``.rda``/``.arb`` only) is pure Python and
   runs in-process — deterministic and fast.
 * the full run (suppress + write ``.tab`` -> :class:`TableResult`) drives the
-  native HiGHS solver, so it runs in a *fresh subprocess* (one solver per
-  process; multiple solvers in one process can segfault — see ``test_cli.py``).
+  native engine, so it runs in a *fresh subprocess* and requires a clean exit.
 """
 
 import json
@@ -119,13 +118,24 @@ def test_accepts_list_of_dicts(tmp_path):
 # ===========================================================================
 # Full run — subprocess isolation (native solver)
 # ===========================================================================
-def _run_protect_subprocess(micro, tables, response, suppress):
+def _run_protect_subprocess(micro, tables, response, suppress, **kwargs):
     code = (
         "import json\n"
         "from pytauargus.protect import protect\n"
         f"res = protect(json.loads({json.dumps(micro)!r}), "
         f"json.loads({json.dumps(tables)!r}), response={response!r}, "
-        f"safety_rules='P(25,1000)', suppress={suppress!r})\n"
+        f"safety_rules='P(25,1000)', suppress={suppress!r}, "
+        f"**json.loads({json.dumps(kwargs)!r}))\n"
+        # Read with a short output request and with the full safety-rule count.
+        # Native GetTableCell writes all configured scores in either case.
+        "for topn in (0, 2, 1000):\n"
+        "    cell = res.engine._tau.get_table_cell(0, [0, 0], topn)\n"
+        "    assert cell[0] and cell[1] == 100\n"
+        "    for i in (11, 12, 14, 15):\n"
+        "        assert len(cell[i]) == max(1, topn)\n"
+        "    assert cell[11][0] == 40\n"
+        "assert res.engine._tau.get_table_cell(0, [0]) == (False,)\n"
+        "assert res.engine._tau.get_table_cell(-1, [0, 0]) == (False,)\n"
         "out = {\n"
         "  'n_tables': len(res.tables),\n"
         "  'files': res.files,\n"
@@ -138,24 +148,15 @@ def _run_protect_subprocess(micro, tables, response, suppress):
     )
     env = dict(os.environ, PYTHONPATH=str(SRC) + os.pathsep
                + os.environ.get("PYTHONPATH", ""))
-    # The real work is done before the native HiGHS solver tears down, so we
-    # treat a valid JSON payload on stdout as success. The interpreter can
-    # still die during HiGHS teardown (the documented fragility — see
-    # test_cli.py / test_suppress.py): a non-zero rc *after* the JSON is
-    # printed (teardown segfault) is fine, but a process killed by a signal
-    # with no output at all (e.g. rc=-9 under full-suite resource contention)
-    # is transient, so retry once before failing.
-    proc = None
-    for attempt in range(2):
-        proc = subprocess.run(
-            [sys.executable, "-c", code],
-            capture_output=True, text=True, env=env,
-            cwd=str(Path(__file__).resolve().parent),
-        )
-        if proc.stdout.strip():
-            break
-        if proc.returncode >= 0 or attempt == 1:
-            break  # real failure (Python error) or retries exhausted
+    env["PYTHONFAULTHANDLER"] = "1"
+    proc = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, env=env,
+        cwd=str(Path(__file__).resolve().parent), timeout=90,
+    )
+    assert proc.returncode == 0, (
+        f"protect() subprocess failed (rc={proc.returncode}):\n"
+        f"STDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}"
+    )
     out_text = proc.stdout.strip()
     if not out_text:
         raise AssertionError(
@@ -169,8 +170,12 @@ def _run_protect_subprocess(micro, tables, response, suppress):
             "STDERR:\n%s" % (proc.returncode, proc.stdout, proc.stderr))
 
 
-def test_protect_full_run_subprocess():
-    out = _run_protect_subprocess(MICRO, [["Region", "Size"]], "Var2", "OPT(1)")
+@pytest.mark.parametrize("kwargs", [
+    {}, {"weighted": True, "weight_var": "Weight"}, {"holding_var": "Company"},
+])
+def test_protect_full_run_subprocess(kwargs):
+    micro = dict(MICRO, Weight=[1., 1., 1., 1.], Company=["a", "b", "c", "d"])
+    out = _run_protect_subprocess(micro, [["Region", "Size"]], "Var2", "OPT(1)", **kwargs)
     assert out["n_tables"] == 1
     r = out["results"][0]
     # 2 x 2 crossing + total rows/cols (the rda carries <TOTCODE> "Total")
@@ -188,3 +193,16 @@ def test_protect_full_run_subprocess():
             assert sf == "x"
         else:
             assert isinstance(sf, (int, float))
+
+
+def test_public_protect_import_in_fresh_process():
+    proc = subprocess.run(
+        [sys.executable, "-c", "from pytauargus import protect, ProtectResult; "
+         "assert callable(protect); "
+         "assert isinstance(protect({'R': ['a'], 'V': [1.]}, ['R'], "
+         "response='V', run=False), ProtectResult); "
+         "from pytauargus import protect as again; assert again is protect"],
+        capture_output=True, text=True, timeout=30,
+        env=dict(os.environ, PYTHONPATH=str(SRC)),
+    )
+    assert proc.returncode == 0, proc.stderr
