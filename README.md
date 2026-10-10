@@ -5,6 +5,11 @@ data, plus a Python tool that drives it. It is a drop-in replacement for the
 batch mode of legacy Tau-Argus 4.1: same `.arb` batch files, file formats and
 outputs, without the GUI.
 
+This is a personal rewrite of the legacy product, started a few years ago and
+worked on in on-and-off sprints: the C/C++ solver engine is rebuilt to a modern
+toolchain on an open-source solver, and the Java/Swing desktop front-end is
+replaced by a headless Python CLI.
+
 The project has two parts:
 
 - **tauargus-engine** (`engine/`): the C/C++ libraries that do the work, built
