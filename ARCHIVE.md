@@ -30,6 +30,9 @@ Branch: `rewrite`
 - Before fix: plain/weighted/holding regressions fail under ASan. After fix:
   11 protect tests pass under ASan; original input passes 60 fresh processes
   under ASan and 60 with release libs; full suite: 216 passed, 3 optional skips.
+- GitHub CI run 38072531248 passes macOS 15, Ubuntu x86_64 and Ubuntu ARM64.
+  Fix submitted as tauargus-engine PR #4 to `feature/dataframe-protect`;
+  core capacity-query addition is libtauargus PR #1 (pin `5f913c95`).
 
 ## Original goals
 1. Port to the open source solver and make it cloud native and portable
