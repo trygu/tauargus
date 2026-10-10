@@ -14,6 +14,20 @@ The project has two parts:
   command-line tool that link those libraries. Wheels bundle HiGHS and the
   engine.
 
+## Relationship to the original Tau-Argus
+
+This is the original Tau-Argus solver code, not a reimplementation:
+
+- **Engine:** the C/C++ code is largely unchanged. The changes make it build
+  with a modern toolchain (CMake, current GCC/Clang/MSVC), switch the solver
+  backend to HiGHS, and make it self-contained.
+- **Audit:** the standalone `intervalle.exe` audit program (Pascal) is ported
+  into the `csp` engine module, so the feasibility-interval audit runs in-process
+  instead of as a separate executable.
+- **Python package:** `pytauargus` is new. Its function signatures and way of
+  working are borrowed from [rtauargus](https://github.com/InseeFrLab/rtauargus),
+  the R wrapper around Tau-Argus.
+
 ## Install
 
 From [PyPI](https://pypi.org/project/pytauargus/):
