@@ -17,10 +17,10 @@ Audit runs explicitly on the returned engine.
 
 ## Running
 
-Build the current development checkout using the repository's
+The DataFrame API requires `pytauargus>=0.3.0`; published wheels include the
+native engine and HiGHS. To work from this checkout, follow the repository's
 [source-build instructions](../../../README.md#building-from-source).
-The DataFrame API awaits the next release, so existing published wheels may
-not include it. Then, from `bindings/python/`:
+Then, from `bindings/python/`:
 
 ```bash
 # interactive

@@ -88,7 +88,7 @@ A ready-made image is published to GitHub Container Registry with each release
 docker run --rm -v "$PWD":/work ghcr.io/trygu/tauargus-engine run batch.arb
 ```
 
-Pin a version with `ghcr.io/trygu/tauargus-engine:0.2.1`. To build your own image:
+Pin a version with `ghcr.io/trygu/tauargus-engine:0.3.0`. To build your own image:
 
 ```dockerfile
 FROM python:3.12-slim

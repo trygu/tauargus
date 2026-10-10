@@ -40,7 +40,7 @@ A ready-made image is published to GitHub Container Registry with each release
 docker run --rm -v "$PWD":/work ghcr.io/trygu/tauargus-engine run batch.arb
 ```
 
-Pin a version with `ghcr.io/trygu/tauargus-engine:0.2.1`. To build your own image:
+Pin a version with `ghcr.io/trygu/tauargus-engine:0.3.0`. To build your own image:
 
 ```dockerfile
 FROM python:3.12-slim
@@ -61,9 +61,11 @@ the table can be controlled-rounded. `tauargus` does this from a batch file.
 
 ### From a DataFrame
 
-`protect()` is new on the development branch and awaits the next release.
-Follow the [source-build instructions](../../README.md#building-from-source),
-then run `uv sync --extra dataframe` here to add pandas support.
+`protect()` is available from version 0.3.0. Install with
+`pip install "pytauargus[dataframe]>=0.3.0"` to include pandas support.
+For a source checkout, follow the
+[source-build instructions](../../README.md#building-from-source),
+then run `uv sync --extra dataframe` here.
 
 ```python
 import pandas as pd
