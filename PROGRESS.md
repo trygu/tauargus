@@ -18,9 +18,9 @@ Goal: HiGHS solvers, portable cloud-native build, headless Python CLI replacing 
   fixed (R `strsplit` = regex, applied per block). 177 tests green.
 
 ## Next (priority order)
-1. **GHCR package rename → `tauargus-engine`** (user request, in flight):
-   0.2.1 re-release pushes `ghcr.io/trygu/tauargus-engine`; then run
-   `delete-old-gcr.yml` to remove `trygu/tauargus` from GHCR.
+1. **GHCR rename → `tauargus-engine`** — 0.2.1 pushed
+   `ghcr.io/trygu/tauargus-engine` (`:0.2.1`+`:latest`, verified). Remaining:
+   run `delete-old-gcr.yml` to remove the old `trygu/tauargus` package.
 2. **Top-level project rename** (repo/package naming) — decide + execute later.
 3. Task 1: document solver strategy (legacy roles → HiGHS); Dockerfile.
 4. **ANSI-TUI design tightened** (`docs/ui-design.md`): Option A (headless
@@ -29,8 +29,7 @@ Goal: HiGHS solvers, portable cloud-native build, headless Python CLI replacing 
    unblocked either way; TUI later on `feat/ansi-ui`.
 
 ## Watch items
-- OPT/MOD nonzero `max_time` → deterministic native segfault (solver
-  time-limit code); notebooks/READMEs use `0` (no limit).
-- Non-deterministic ~40% `Highs_destroy` segfault (pre-existing, ARCHIVE).
+- OPT/MOD nonzero `max_time` → deterministic segfault (solver time-limit);
+  notebooks/READMEs use `0`. ~40% `Highs_destroy` segfault (pre-existing).
 - `open_microdata` calls `clean_all` — safe only because tables finalize after.
 - Parquet as the microdata dataframe backend (not started).
