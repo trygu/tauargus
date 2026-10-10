@@ -13,12 +13,12 @@ Goal: HiGHS solvers, portable cloud-native build, headless Python CLI.
 - [x] Positive OPT/MOD time-limit regressions + corrected audit docs (PR #3).
 - [x] macOS `protect()` score-buffer overflow + public import fixed (PR #4).
   Native PR #1 merged into `rewrite`; ASan and release checks in ARCHIVE.
-
 - [x] DataFrame examples in all three notebooks and both READMEs refreshed.
   37 executed code cells; relative-workdir regression fixed; 219 tests pass.
 
-## Current review
-- Consolidated feature is ready for a controlled draft PR to `master`.
+## Current review — draft PR #5 to `master`
+- Prepared-table guard verified: native release/ASan and 219 Python tests.
+  Regression now runs in CI; completed details are in ARCHIVE.md.
 
 ## Next (priority order)
 1. **GHCR rename → `tauargus-engine`** — 0.2.1 verified. Delete old

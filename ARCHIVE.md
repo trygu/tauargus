@@ -364,3 +364,20 @@ the `.rda` writer. No `.tab`/`.hst` generator, no native `.hrc` getter
   polars checks); all three notebooks executed separately, **37 code cells**
   with saved outputs and no cell errors. Both README examples ran in fresh
   processes, notebook files validated, and all cell sources match `_build.py`.
+
+## Reject unprepared cell-buffer capacity queries (2026-10-10)
+
+- Confirmed the review finding: code-list exploration does not prepare tables.
+  `GetTableCellBufferSizes` previously returned success for an unconfigured
+  table, with capacities that could change during subsequent preparation.
+- Core `ab37b03` rejects a null or unprepared effective table, including the
+  recoded-table selection, before writing any output arguments. Documented
+  that failure leaves those arguments unchanged.
+- Added an opt-in native CTest regression. It failed before the guard, and now
+  checks rejection before exploration, after exploration, after configuration
+  and for invalid indices. Prepared original and recoded tables still succeed,
+  including valid zero score capacities. The test uses explicit checks that
+  remain active in release builds.
+- Native regression passes in release and ASan builds. Rebuilt the Python
+  extension against the updated core: **219 passed, 2 optional polars skips**.
+  Enabled the native regression in the existing three-platform test workflow.
