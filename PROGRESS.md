@@ -10,15 +10,13 @@ Goal: HiGHS solvers, portable cloud-native build, headless Python CLI.
   CI → GH Release + PyPI + GHCR. **Release 0.2.0**; example notebooks.
 - [x] **High-level API — DataFrame `protect()`** (2026-10-10, this branch):
   DataFrame/dict -> native batch -> type-5 `TableResult`; optional pandas.
+- [x] Positive OPT/MOD time-limit regressions + corrected audit docs (PR #3).
+- [x] macOS `protect()` score-buffer overflow + public import fixed (PR #4).
+  Native PR #1 merged into `rewrite`; ASan and release checks in ARCHIVE.
 
-## Verified fix (2026-10-10; PR #4 merged into feature/dataframe-protect)
-- macOS `protect()` abort: ASan confirmed native score-buffer overflow in
-  Python binding. Allocate from native table capacities; no crash retries.
-- Public `protect` import recursion fixed. Plain/weighted/holding regression
-  cases: 11 pass with ASan; 216 pass, 3 skip in full release-build suite.
-- Original input: 60 fresh-process runs clean under ASan and 60 in release.
-- CI run 38072531248: macOS, Linux x86_64 and Linux ARM64 all pass.
-- Native PR #1 merged into `rewrite`; temporary fix branches removed.
+## Consolidation (2026-10-10)
+- Master PR #3 consolidated into `feature/dataframe-protect`, alongside PR #4.
+  Only PROGRESS conflicted; combined full suite: 218 passed, 3 optional skips.
 
 ## Next (priority order)
 1. **GHCR rename → `tauargus-engine`** — 0.2.1 verified. Delete old
@@ -28,7 +26,7 @@ Goal: HiGHS solvers, portable cloud-native build, headless Python CLI.
 4. **ANSI-TUI** (`textual`, own `pytauargus-tui`) on `tui` branch.
 
 ## Watch items
-- Positive OPT/MOD time limits passed regression checks on master (PR #3).
+- OPT/MOD deadline expiry needs separate coverage; positive limits pass.
 - `open_microdata` calls `clean_all` — safe only because tables finalize after.
 - Parquet as the microdata dataframe backend (not started).
 - Ref: `piargus` (`references/piargus`, transient) — compare API/flow, drop after.
