@@ -63,7 +63,7 @@ They are built for Python 3.10-3.13 on:
 Intel Macs and Windows ARM are not built, and there is no source
 distribution; on those platforms see [Building from source](#building-from-source).
 The same wheels are attached to each
-[GitHub Release](https://github.com/trygu/tauargus/releases).
+[GitHub Release](https://github.com/trygu/tauargus-engine/releases).
 
 ## Cloud native
 

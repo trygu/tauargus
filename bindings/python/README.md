@@ -80,7 +80,7 @@ failing the dominance rule `NK(2,75)` (two largest contributors may not make up
 more than 75 %), applies secondary suppression with the modular method, and
 writes the protected table as code/value pairs, with suppressed values masked.
 The sample inputs are in the repository's
-[data/](https://github.com/trygu/tauargus/tree/rewrite/data) folder.
+[data/](https://github.com/trygu/tauargus-engine/tree/rewrite/data) folder.
 
 ## Batch file commands
 

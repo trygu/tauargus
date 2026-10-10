@@ -25,9 +25,9 @@ test = ["pytest"]
 notebooks = ["jupyterlab", "nbclient", "nbformat", "ipykernel"]
 
 [project.urls]
-Homepage = "https://github.com/trygu/tauargus"
-Repository = "https://github.com/trygu/tauargus"
-Issues = "https://github.com/trygu/tauargus/issues"
+Homepage = "https://github.com/trygu/tauargus-engine"
+Repository = "https://github.com/trygu/tauargus-engine"
+Issues = "https://github.com/trygu/tauargus-engine/issues"
 
 [project.scripts]
 tauargus = "pytauargus.cli:main"
