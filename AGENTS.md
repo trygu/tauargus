@@ -56,3 +56,19 @@ Port SDC tool to HiGHS solver, portable cloud-native build, and headless Python 
 - Commit cadence: Submodule commit first -> parent submodule bump + `PROGRESS.md` update.
 - Never stage build artifacts (`.venv/`, `build/`, `dist/`, `*.so`, `*.dylib`, `engine/build/`, `engine/native/build/`).
 - No Windows registry APIs: Use environment variables, config files, or `tempfile`.
+- Commits are authored as the user only: no `Co-authored-by` trailer.
+
+## 7. Releasing (PyPI + GHCR image)
+- Releases are tag-driven: tag `py-v<version>` runs `.github/workflows/wheels.yml`
+  (wheels -> GitHub Release -> PyPI via trusted publishing -> GHCR image).
+- PyPI versions are immutable and the workflow fails if the tag differs from the
+  package version. Never reuse or move a published tag.
+- To release (only when the user asks):
+  1. Bump `version` in `bindings/python/pyproject.toml` (semver: patch = fixes,
+     minor = features, major = breaking).
+  2. `cd bindings/python && uv lock && uv run pytest` must pass.
+  3. Commit (`Release X.Y.Z`) and push the branch.
+  4. `git tag py-vX.Y.Z && git push origin py-vX.Y.Z`.
+  5. Watch the run: `gh run list --workflow wheels --limit 1`.
+- Wheels: macOS arm64, Linux x86_64 (manylinux_2_28), Windows x64; Python 3.10-3.13.
+- The image is `ghcr.io/trygu/tauargus:<version>` and `:latest`.
