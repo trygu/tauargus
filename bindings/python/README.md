@@ -176,6 +176,32 @@ hierarchy files and `pytauargus.rda.write_rda` writes `.rda` metadata text.
 The generator does not produce the fixed-width `.asc` microdata file itself;
 it references that file by name.
 
+## Example notebooks
+
+`notebooks/` contains three **executed, output-saved** notebooks that double
+as API documentation (every code cell runs against the verified public API):
+
+| Notebook | Covers |
+|----------|--------|
+| [`01_quickstart`](notebooks/01_quickstart.ipynb) | import, the test data, `parse_rda`/`Metadata`, `run_batch`, table + cell inspection |
+| [`02_protection_and_audit`](notebooks/02_protection_and_audit.ipynb) | safety rules → OPT/MOD/RND suppression → status distribution → `audit()` realized intervals (Intervalle) → export |
+| [`03_generators`](notebooks/03_generators.ipynb) | `micro_arb`, `write_rda`/`rda_text`, `write_hrc`, generate→run round-trip |
+
+Run them interactively, or headless (the same command CI could use):
+
+```bash
+# interactive
+uv sync --extra notebooks
+uv run --with jupyterlab jupyter lab notebooks/
+
+# headless: execute every notebook and re-save its outputs
+uv run --with nbclient --with nbformat --with ipykernel python notebooks/_run.py
+```
+
+`uv run --with nbclient --with nbformat --with ipykernel pytest -k notebooks`
+executes them as tests too (the test skips when `nbclient` is absent, so the
+default `uv run pytest` gate stays dependency-free).
+
 ## License
 
 EUPL-1.2. Tau-Argus is (c) Statistics Netherlands.

@@ -254,3 +254,28 @@ emits the fixed-width `.asc` via `gdata::write.fwf` and computes
 position/width/digits from microdata — a separate `.asc` generator, not part of
 the `.rda` writer. No `.tab`/`.hst` generator, no native `.hrc` getter
 (matches the rtauargus gap list).
+
+## Example notebooks + micro.py rda fix (2026-10-10)
+
+- `bindings/python/notebooks/` — three executed notebooks doubling as API
+  docs: `01_quickstart` (import, data locator, parse_rda/Metadata, run_batch,
+  table+cell inspection), `02_protection_and_audit` (safety rules ->
+  OPT/MOD/RND -> status distribution -> audit() realized intervals),
+  `03_generators` (micro_arb, write_rda/rda_text, write_hrc,
+  generator->run_batch round-trip). Built by `notebooks/_build.py`, executed
+  + output-saved by `notebooks/_run.py` (nbclient, no Jupyter needed).
+- `notebooks` optional extra (jupyterlab/nbclient/nbformat/ipykernel);
+  optional `tests/test_notebooks.py` (importorskip nbclient) so the release
+  `uv run pytest` gate stays fast/dependency-free. Outputs -> gitignored
+  `notebooks/out/`.
+- Safe defaults only: OPT/MOD max_time=0; RND rnd_base from the engine; no
+  GH/NET/CTA (external executables).
+- `micro.py::write_rda_1var` bug: emitted the header glued to the first body
+  line (missing the newline before it). R uses `paste(sep="\n", ligne1,
+  body...)`. Fixed to join header + body with a single `\n`. (`rda.py`'s
+  separate `write_rda_1var` was already correct.)
+- `tests/test_micro.py` (untracked, in-flight .asc writer port) fixed its
+  R-contract port: R `strsplit("\n  +")` is a regex (newline + 2+ spaces)
+  applied per block vector then unlist-ed, not a literal `str.split` on the
+  joined string. Now splits each block with `re` and flattens.
+- After fixes: 177 passed, 1 skipped (the notebook test without nbclient).

@@ -141,6 +141,24 @@ micro_arb(
 produce the fixed-width `.asc` microdata file itself (that step stays in your
 pipeline); it references it by name.
 
+## Example notebooks
+
+[bindings/python/notebooks/](bindings/python/notebooks/) contains three
+**executed, output-saved** notebooks that double as API documentation:
+
+1. [`01_quickstart`](bindings/python/notebooks/01_quickstart.ipynb) — the data,
+   `parse_rda`, `run_batch`, table and cell inspection.
+2. [`02_protection_and_audit`](bindings/python/notebooks/02_protection_and_audit.ipynb)
+   — safety rules → OPT/MOD/RND suppression → `audit()` feasibility intervals
+   (the ported Intervalle) → export.
+3. [`03_generators`](bindings/python/notebooks/03_generators.ipynb) —
+   `micro_arb` / `write_rda` / `write_hrc`, and a generate→run round-trip.
+
+Headless execution (no Jupyter needed):
+`uv run --with nbclient --with nbformat --with ipykernel python notebooks/_run.py`
+(from `bindings/python/`). See
+[the Python README](bindings/python/README.md#example-notebooks) for details.
+
 ## What it does
 
 SDC reduces the risk that published tables disclose information about

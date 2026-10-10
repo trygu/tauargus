@@ -152,7 +152,8 @@ def write_rda_1var(info_var: dict) -> str:
     if type_var in ("NUMERIC", "WEIGHT"):
         body.append("  <DECIMALS> %s" % info_var["digits"])
 
-    return ligne1 + "\n".join(body)
+    # R: paste(sep = "\n", ligne1, body...) — newline before every line
+    return "\n".join([ligne1] + body)
 
 
 def write_rda(info_vars: Sequence[dict]) -> List[str]:

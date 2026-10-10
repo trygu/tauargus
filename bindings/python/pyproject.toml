@@ -21,6 +21,8 @@ dependencies = []
 
 [project.optional-dependencies]
 test = ["pytest"]
+# Interactive examples + headless execution of the notebooks/ directory.
+notebooks = ["jupyterlab", "nbclient", "nbformat", "ipykernel"]
 
 [project.urls]
 Homepage = "https://github.com/trygu/tauargus"
