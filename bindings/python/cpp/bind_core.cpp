@@ -148,7 +148,7 @@ void init_core(py::module_ &m) {
              std::vector<long> a(dom_n), b(dom_k), c(pq_p), d(pq_q), e(pq_n);
              std::vector<long> f(min_freq), g(peep_perc), h(peep_range), i(peep_minfreq), j(freq_perc);
              auto or2 = [](std::vector<long> &v, long dft) {
-                 while (v.size() < 2) v.push_back(dft);
+                 while (v.size() < 4) v.push_back(dft);  // PeepPerc is read as [0..3]
              };
              or2(a, 0); or2(b, 0); or2(c, 0); or2(d, 100); or2(e, 0);
              or2(f, 0); or2(g, 0); or2(h, 0); or2(i, 0); or2(j, 0);
