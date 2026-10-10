@@ -1,7 +1,7 @@
 # Tau-Argus Rewrite — Progress
 
 Branches: `master` (mainline) + `tui` (TUI). This work is on
-`feature/dataframe-protect` (branch protection: no direct master commits).
+`fix/dataframe-protect-abort`, based on `feature/dataframe-protect`.
 Goal: HiGHS solvers, portable cloud-native build, headless Python CLI.
 
 ## Verified checkpoints (details in ARCHIVE.md)
@@ -9,16 +9,15 @@ Goal: HiGHS solvers, portable cloud-native build, headless Python CLI.
 - [x] Task 4 headless CLI; rename to `pytauargus`; self-contained wheel +
   CI → GH Release + PyPI + GHCR. **Release 0.2.0**; example notebooks.
 - [x] **High-level API — DataFrame `protect()`** (2026-10-10, this branch):
-  one-call `protect(df|dict, tables, response, ...)` ->
-  `TableResult` (`safe()`/`status()`/`unsafe()`/`dataframe()`).
-  `TableResult` + `parse_simple_tab` read the engine's type-5 `SO+` tab.
-  `dataframe.py`: `to_microdata` (pandas/polars/dict, duck-typed core),
-  `make_frame` (pandas extra, no hard dep). `run=False` = file-only mode.
-  **Root-cause fix:** `Variable.is_numeric` wrongly included CATEGORICAL/
-  CAT_RESP -> native `ConvertNumeric` on cat codes -> `ISNOTNUMERIC` (1018)
-  in `explore_file`. e2e runs in a fresh subprocess (HiGHS teardown is
-  flaky; JSON-on-stdout is the success signal, retry on signal-kill).
-  **213 passed, 3 skipped** (pandas active; polars/nbclient optional).
+  DataFrame/dict -> native batch -> type-5 `TableResult`; optional pandas.
+
+## Current fix (2026-10-10; PR #4 to feature/dataframe-protect)
+- macOS `protect()` abort: ASan confirmed native score-buffer overflow in
+  Python binding. Allocate from native table capacities; no crash retries.
+- Public `protect` import recursion fixed. Plain/weighted/holding regression
+  cases: 11 pass with ASan; 216 pass, 3 skip in full release-build suite.
+- Original input: 60 fresh-process runs clean under ASan and 60 in release.
+- CI run 38072531248: macOS, Linux x86_64 and Linux ARM64 all pass.
 
 ## Next (priority order)
 1. **GHCR rename → `tauargus-engine`** — 0.2.1 verified. Delete old
@@ -28,8 +27,7 @@ Goal: HiGHS solvers, portable cloud-native build, headless Python CLI.
 4. **ANSI-TUI** (`textual`, own `pytauargus-tui`) on `tui` branch.
 
 ## Watch items
-- OPT/MOD nonzero `max_time` → deterministic segfault (solver time-limit);
-  notebooks/READMEs use `0`. (`Highs_destroy` segfault FIXED 2026-10-07.)
+- Positive OPT/MOD time limits passed regression checks on master (PR #3).
 - `open_microdata` calls `clean_all` — safe only because tables finalize after.
 - Parquet as the microdata dataframe backend (not started).
 - Ref: `piargus` (`references/piargus`, transient) — compare API/flow, drop after.
