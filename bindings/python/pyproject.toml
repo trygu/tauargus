@@ -20,9 +20,12 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-test = ["pytest"]
+# DataFrame in/out adapters (to_microdata / TableResult.dataframe()).
+# The core never imports these; install one to get real frame objects.
+dataframe = ["pandas"]
+test = ["pytest", "pandas"]
 # Interactive examples + headless execution of the notebooks/ directory.
-notebooks = ["jupyterlab", "nbclient", "nbformat", "ipykernel"]
+notebooks = ["jupyterlab", "nbclient", "nbformat", "ipykernel", "pandas"]
 
 [project.urls]
 Homepage = "https://github.com/trygu/tauargus-engine"

@@ -52,8 +52,12 @@ jobs:
         run: |
           set -euo pipefail
           HIGHS_CFG="$(dirname "$(find "$RUNNER_TEMP/highs-prefix" -name 'highs-config.cmake' -o -name 'highsConfig.cmake' -o -name 'HighsConfig.cmake' | head -n1)")"
-          cmake -S engine -B engine/build -DCMAKE_BUILD_TYPE=Release -DHighs_DIR="$HIGHS_CFG"
+          cmake -S engine -B engine/build -DCMAKE_BUILD_TYPE=Release -DHighs_DIR="$HIGHS_CFG" \
+            -DTAUARGUS_CORE_BUILD_TESTS=ON
           cmake --build engine/build -j
+
+      - name: Test native core
+        run: ctest --test-dir engine/build/native/core --output-on-failure
 
       - name: Install package
         working-directory: bindings/python

@@ -6,6 +6,7 @@
 
 #include <string>
 #include <vector>
+#include <algorithm>
 
 #include "TauArgus.h"
 #include "init_decls.h"
@@ -203,19 +204,26 @@ void init_core(py::module_ &m) {
                                   const std::vector<long> &dim_index,
                                   long topn) -> py::tuple {
             std::vector<long> d = dim_index;
-            int n = (int)d.size();
-            int msz = (int)(topn > 0 ? topn : 1);
+            long dimensions = 0, cell_scores = 0, holding_scores = 0;
+            if (!t.GetTableCellBufferSizes(tab, &dimensions, &cell_scores,
+                                           &holding_scores)
+                    || dimensions <= 0 || d.size() != (size_t)dimensions) {
+                return py::make_tuple(false);
+            }
+            const size_t msz = (size_t)(topn > 0 ? topn : 1);
             double resp = 0, rresp = 0, cta = 0, ckm = 0, shadow = 0, cost = 0;
             double key = 0, key_nz = 0, peep_cell = 0, peep_holding = 0;
             double lower = 0, upper = 0, rlower = 0, rupper = 0;
             long freq = 0, status = 0, holding_freq = 0;
-            // The engine writes nMaxScore* entries regardless of `topn`;
-            // keep slack so a short request cannot overflow the buffers.
-            const size_t cap = (size_t)msz + 64;
-            std::vector<double> ms(cap, 0.0), msw(cap, 0.0), hms(cap, 0.0);
-            std::vector<long> hnr(cap, 0);
+            // GetTableCell always writes all configured scores. `topn` only
+            // limits the arrays returned to Python after the native call.
+            const size_t cell_cap = std::max(msz, (size_t)cell_scores);
+            const size_t holding_cap = std::max(msz, (size_t)holding_scores);
+            std::vector<double> ms(cell_cap, 0.0), msw(cell_cap, 0.0);
+            std::vector<double> hms(holding_cap, 0.0);
+            std::vector<long> hnr(holding_cap, 0);
             long peep_sort_cell = 0, peep_sort_holding = 0;
-            bool ok = n > 0 && t.GetTableCell(
+            bool ok = t.GetTableCell(
                     tab, d.data(), &resp, &rresp, &cta, &ckm, &shadow, &cost,
                     &key, &key_nz, &freq, &status, ms.data(), msw.data(),
                     &holding_freq, hms.data(), hnr.data(), &peep_cell,

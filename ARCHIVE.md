@@ -5,6 +5,46 @@ Historical/completed state, extracted from `PROGRESS.md` on 2026-10-06
 
 Branch: `rewrite`
 
+## Consolidated DataFrame branch (2026-10-10)
+- Merged master (`c0b6e48`, PR #3) into `feature/dataframe-protect`, which
+  already contains PR #4 and the native capacity query (`5f913c95`).
+- Both fixes, regression suites and documentation changes now share the
+  active feature branch. Only PROGRESS needed conflict resolution.
+- Combined full Python suite against release native libs: 218 passed,
+  3 optional skips. No additional branch created.
+
+## DataFrame API checkpoint (2026-10-10)
+- `protect(df|dict, tables, response, ...)` writes microdata/metadata/batch and
+  reads type-5 `SO+` output into `TableResult`; `run=False` writes inputs only.
+- `Variable.is_numeric` excludes categorical variables to avoid native
+  `ConvertNumeric` errors (`ISNOTNUMERIC`, 1018) on categorical codes.
+- Initial branch verification reported 213 passed, 3 skipped. Its subprocess
+  test accepted JSON even on a crash and retried signal failures; subsequent
+  macOS CI exposed an abort, so that result did not establish memory safety.
+
+## DataFrame native abort diagnosis and fix (2026-10-10)
+- CI run 38071022820, macOS job 114268275994 failed in the full `protect()`
+  subprocess with SIGABRT. The same input reproduced a SIGSEGV locally,
+  sometimes after output, during Python GC.
+- ASan identified an 8-byte write just after a 520-byte allocation in
+  `TauArgus::GetTableCell`, called by `bind_core.cpp`: the default request
+  allocated 1 + 64 scores, but `P(25,1000)` configured 1000 native scores.
+- Core adds `GetTableCellBufferSizes`; binding allocates cell, weighted and
+  holding buffers from the effective table counts before trimming to `topn`.
+  Validate dimension count before passing its index buffer to native code.
+- Removed retries and JSON-only success from the regression. Child failures
+  always fail the test, with faulthandler enabled and a bounded timeout.
+- Fixed separate fresh-import recursion in `from pytauargus import protect`.
+- Before fix: plain/weighted/holding regressions fail under ASan. After fix:
+  11 protect tests pass under ASan; original input passes 60 fresh processes
+  under ASan and 60 with release libs; full suite: 216 passed, 3 optional skips.
+- GitHub CI run 38072531248 passes macOS 15, Ubuntu x86_64 and Ubuntu ARM64.
+  Fix submitted as tauargus-engine PR #4 to `feature/dataframe-protect`;
+  core capacity-query addition is libtauargus PR #1 (pin `5f913c95`).
+- Both PRs merged: native #1 into `rewrite` (`b75aabe2`), engine #4 into
+  `feature/dataframe-protect` (`746bc115`). Temporary fix branches removed;
+  subsequent fixes use the active feature branch directly.
+
 ## Original goals
 1. Port to the open source solver and make it cloud native and portable
 2. Clean up the code
@@ -303,3 +343,70 @@ the `.rda` writer. No `.tab`/`.hst` generator, no native `.hrc` getter
   are preserved. No native solver changes were needed for the tested workload.
 - Verification: **179 passed, 1 skipped** (nbclient absent), using the current
   Python sources with the native artifacts from the published 0.2.1 wheel.
+
+## DataFrame documentation and executable examples (2026-10-10)
+
+- Refreshed all three notebooks and their `_build.py` source around the public
+  `protect()` API: DataFrame quickstart, OPT/MOD and explicit audit, masked CSV,
+  multiple tables and `run=False` preview. Kept the lower-level batch examples.
+- Updated the root, Python binding and notebook READMEs. Documented retained
+  files, optional pandas, result accessors and the distinction between original
+  diagnostic values, protection levels, realized audit bounds and safe exports.
+  Corrected source-build order and the stale claim that no writer produces ASC.
+  Custom CSV examples now explicitly request output type 1.
+- Added pandas to the notebook extra. The runner consistently uses the notebook
+  directory, and selective regeneration preserves IDs of unchanged cells.
+- Executing the README examples exposed duplicated paths for relative
+  `workdir` values. Normalize the workdir to an absolute path before generating
+  batch inputs/outputs; a strict native subprocess regression fails before the
+  fix and passes afterward. All changes stay on `feature/dataframe-protect`.
+- Verification: **219 passed, 2 skipped** in the non-notebook suite (optional
+  polars checks); all three notebooks executed separately, **37 code cells**
+  with saved outputs and no cell errors. Both README examples ran in fresh
+  processes, notebook files validated, and all cell sources match `_build.py`.
+
+## Reject unprepared cell-buffer capacity queries (2026-10-10)
+
+- Confirmed the review finding: code-list exploration does not prepare tables.
+  `GetTableCellBufferSizes` previously returned success for an unconfigured
+  table, with capacities that could change during subsequent preparation.
+- Core `ab37b03` rejects a null or unprepared effective table, including the
+  recoded-table selection, before writing any output arguments. Documented
+  that failure leaves those arguments unchanged.
+- Added an opt-in native CTest regression. It failed before the guard, and now
+  checks rejection before exploration, after exploration, after configuration
+  and for invalid indices. Prepared original and recoded tables still succeed,
+  including valid zero score capacities. The test uses explicit checks that
+  remain active in release builds.
+- Native regression passes in release and ASan builds. Rebuilt the Python
+  extension against the updated core: **219 passed, 2 optional polars skips**.
+  Enabled the native regression in the existing three-platform test workflow.
+
+## Wrapper acknowledgements (2026-10-10)
+
+- Added acknowledgements in the root and Python binding READMEs, with links
+  to InseeFrLab/rtauargus and lverweijen/piargus (PiArgus).
+- Credited rtauargus for the ported file-generation logic and protection flow;
+  credited PiArgus for DataFrame/result API inspiration and TableResult accessors.
+
+## PR #5 review corrections (2026-10-10)
+
+- Added regressions before fixes for all six API findings and both notebook
+  path findings. Also covered duplicate labels after string conversion and
+  duplicate explanatory/response names, which could silently overwrite data.
+- Preserve the result layout by rejecting reserved diagnostic names (`freq`,
+  `cost`, `status`, `lower`, `upper`) before `protect()` writes files. Apply
+  equivalent checks in the parser and row-based constructor. A frequency
+  table can still use `freq` as its response because it has no extra freq field.
+- Dict columns require equal lengths. Record input uses the first-seen union
+  of keys, filling absent fields with None. Frame adapters read original labels
+  while producing unique string keys, including integer/tuple pandas labels.
+- Reject invalid per-table suppression lengths before file generation while
+  retaining the single-spec table-number rewriting behavior. The DataFrame
+  fallback returns defensive result rows, preserving later safe/status views.
+- Display portable paths in generated batch previews and file-write messages;
+  engine inputs retain actual paths. Rebuilt and executed all three notebooks
+  (**37 code cells**, no errors); saved outputs contain no workstation paths.
+- Verification: **255 Python tests passed, 2 optional polars skips**, plus
+  **3 saved-notebook checks passed**. Both README examples execute in fresh
+  processes, notebook files validate, and their sources match `_build.py`.

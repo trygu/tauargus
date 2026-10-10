@@ -15,9 +15,9 @@ The project has two parts:
 - **tauargus-engine** (`engine/`): the C/C++ libraries that do the work, built
   against the open-source [HiGHS](https://github.com/ERGO-Code/HiGHS) solver.
   The legacy CPLEX, XPRESS and SCIP backends are gone.
-- **pytauargus** (`bindings/python/`): the Python package and `tauargus`
-  command-line tool that link those libraries. Wheels bundle HiGHS and the
-  engine.
+- **pytauargus** (`bindings/python/`): a DataFrame API (`protect()`), batch
+  API and `tauargus` command-line tool that link those libraries. Wheels
+  bundle HiGHS and the engine.
 
 ## Relationship to the original Tau-Argus
 
@@ -29,9 +29,10 @@ This is the original Tau-Argus solver code, not a reimplementation:
 - **Audit:** the standalone `intervalle.exe` audit program (Delphi, i.e. modern Pascal) is ported
   into the `csp` engine module, so the feasibility-interval audit runs in-process
   instead of as a separate executable.
-- **Python package:** `pytauargus` is new. Its function signatures and way of
-  working are borrowed from [rtauargus](https://github.com/InseeFrLab/rtauargus),
-  the R wrapper around Tau-Argus.
+- **Python package:** `pytauargus` is new. Its file-generation workflow builds
+  on [rtauargus](https://github.com/InseeFrLab/rtauargus), the R wrapper around
+  Tau-Argus. Its DataFrame and result API is inspired by
+  [PiArgus (`piargus`)](https://github.com/lverweijen/piargus).
 
 ## Install
 
@@ -98,6 +99,47 @@ ENTRYPOINT ["tauargus"]
 
 ## Quick start
 
+### From a DataFrame
+
+The new `protect()` API is on the development branch and awaits the next
+release. [Build from source](#building-from-source), then install pandas support
+with `uv sync --extra dataframe` from `bindings/python/`.
+
+```python
+import pandas as pd
+from pytauargus import protect
+
+micro = pd.DataFrame({
+    "Region": ["North"] * 6 + ["South"] * 6,
+    "Sector": ["Retail"] * 3 + ["Services"] * 3
+              + ["Retail"] * 3 + ["Services"] * 3,
+    "Turnover": [100., 5., 5., 10., 10., 10., 20., 20., 20., 30., 30., 30.],
+})
+result = protect(
+    micro, ["Region", "Sector"], response="Turnover",
+    safety_rules="NK(2,75)", workdir="tauargus_run",
+)
+table = result.tables[0]
+published = table.dataframe()[["Region", "Sector"]].copy()
+published["Turnover"] = table.safe()  # primary/secondary suppressed values -> "x"
+published.to_csv("protected.csv", index=False)
+print(published)
+```
+
+`protect()` generates `.asc`, `.rda` and `.arb`, computes the table, applies
+OPT suppression by default and returns `TableResult` objects. Dicts of columns,
+lists of row dicts and polars DataFrames are accepted too. Pass a nested list
+of explanatory variables for multiple tables, or `run=False` to write inputs
+without invoking the engine.
+
+`dataframe()` and `unsafe()` include original values for analysis; use `safe()`
+for the publication response. Audit is explicit: `result.engine.audit(0)`.
+Intermediate files are retained in `result.workdir` for inspection and cleanup.
+See the [Python API guide](bindings/python/README.md#dataframe-protection) for
+result accessors, per-table options and audit/export details.
+
+### From an existing batch
+
 ```bash
 tauargus run data/TestRecode.arb
 ```
@@ -138,26 +180,28 @@ micro_arb(
     safety_rules=["NK(1,85)", "FREQ(3,10)"],
     suppress="GH(.,100)",
     output_names=["tab1.csv", "tab2.csv"],
+    output_type="1",  # CSV; the generator default is SBS/type 4
 )
 ```
 
-`pytauargus.hrc.write_hrc` produces `.hrc` hierarchy files and
-`pytauargus.rda.write_rda` writes `.rda` metadata text. The generator does not
-produce the fixed-width `.asc` microdata file itself (that step stays in your
-pipeline); it references it by name.
+`pytauargus.micro.micro_asc_rda` writes fixed-width `.asc` microdata together
+with `.rda` metadata. `pytauargus.hrc.write_hrc` produces `.hrc` hierarchy
+files, and `pytauargus.rda.write_rda` writes metadata text separately.
+`micro_arb` references an existing `.asc` / `.rda` pair; `protect()` coordinates
+the complete DataFrame-to-files-to-engine pipeline.
 
 ## Example notebooks
 
 [bindings/python/notebooks/](bindings/python/notebooks/) contains three
 **executed, output-saved** notebooks that double as API documentation:
 
-1. [`01_quickstart`](bindings/python/notebooks/01_quickstart.ipynb) — the data,
-   `parse_rda`, `run_batch`, table and cell inspection.
+1. [`01_quickstart`](bindings/python/notebooks/01_quickstart.ipynb) —
+   DataFrame → `protect()` → `TableResult` → masked CSV, then existing batches.
 2. [`02_protection_and_audit`](bindings/python/notebooks/02_protection_and_audit.ipynb)
-   — safety rules → OPT/MOD/RND suppression → `audit()` feasibility intervals
-   (the ported Intervalle) → export.
+   — OPT/MOD DataFrame protection, explicit audit and masked export; lower-level
+   OPT/MOD/RND methods and the ported Intervalle.
 3. [`03_generators`](bindings/python/notebooks/03_generators.ipynb) —
-   `micro_arb` / `write_rda` / `write_hrc`, and a generate→run round-trip.
+   file-only preview (`run=False`), multiple tables and custom generators.
 
 Headless execution (no Jupyter needed):
 `uv run --with nbclient --with nbformat --with ipykernel python notebooks/_run.py`
@@ -250,22 +294,24 @@ Requirements:
   `brew install highs` (macOS), `sudo apt-get install libhighs-dev`
   (Debian/Ubuntu), or [build from source](https://github.com/ERGO-Code/HiGHS#building)
 
-Clone with submodules (`git clone --recurse-submodules`), then build the
-Python package. scikit-build-core drives CMake and compiles the pybind11
-module:
+Clone with submodules (`git clone --recurse-submodules`). Build the five native
+libraries first; the Python binding links the resulting `engine/build/lib/`
+artifacts. CMake finds HiGHS from its installation prefix (set `Highs_DIR`
+explicitly if needed):
+
+```bash
+# from the repository root
+cmake -S engine -B engine/build -DCMAKE_BUILD_TYPE=Release
+cmake --build engine/build -j
+```
+
+Then build the Python package. scikit-build-core compiles the pybind11 module:
 
 ```bash
 cd bindings/python
-uv sync                                          # environment + native extension
+uv sync --extra dataframe                        # environment + extension + pandas
 uv build --wheel                                 # dist/pytauargus-*.whl
 uv tool install --force dist/pytauargus-*.whl    # puts `tauargus` on PATH
-```
-
-To build only the native engine:
-
-```bash
-cmake -S engine -B engine/build -DHighs_DIR=$(brew --prefix)/lib/cmake/Highs
-cmake --build engine/build -j
 ```
 
 Wheels built this way link HiGHS at its install path. The release wheels
@@ -278,6 +324,21 @@ cd bindings/python
 uv sync --extra test
 uv run pytest
 ```
+
+## Acknowledgements
+
+Thanks to the authors, maintainers and contributors of:
+
+- [rtauargus](https://github.com/InseeFrLab/rtauargus), developed by InseeFrLab
+  and its contributors. Its metadata, batch and hierarchy generation logic
+  was ported to `pytauargus`; its `micro_rtauargus()` workflow also informed
+  the high-level `protect()` pipeline.
+- [PiArgus (`piargus`)](https://github.com/lverweijen/piargus), by lverweijen
+  and contributors. Its DataFrame-to-table workflow and result API inspired
+  `TableResult` and its `safe()`, `status()`, `unsafe()` and `dataframe()` accessors.
+
+Their work made these interfaces possible and provides valuable examples of
+integrating Tau-Argus into reproducible data-processing workflows.
 
 ## License
 

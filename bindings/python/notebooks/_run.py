@@ -42,7 +42,10 @@ def run_one(name: str) -> bool:
     }
     t0 = time.monotonic()
     try:
-        client = NotebookClient(nb, timeout=900, kernel_name="python3")
+        client = NotebookClient(
+            nb, timeout=900, kernel_name="python3",
+            resources={"metadata": {"path": str(NB_DIR)}},
+        )
         client.execute()
     except CellExecutionError as e:
         print(f"  FAIL {name}: {e}")
