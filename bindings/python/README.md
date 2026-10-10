@@ -94,6 +94,9 @@ and totals, identifies primary unsafe cells, and adds secondary suppression.
 Pandas is optional for the core API: column dicts, lists of row dicts and
 polars DataFrames are accepted too. `dataframe()` returns a pandas DataFrame
 when available, otherwise polars, otherwise a list of row dicts.
+Column labels become strings and must remain unique after conversion. Column
+dicts require equal lengths; row dicts use the ordered union of all keys, with
+missing fields represented by `None`.
 
 ### Existing batch files
 
@@ -207,6 +210,12 @@ assert all(isinstance(table, TableResult) for table in result.tables)
 | `run=False` | Write `.asc`, `.rda`, `.arb` and return planned output paths without running the engine |
 | `workdir` | Retained directory, resolved from the caller's working directory; returned paths are absolute. Defaults to a new temporary directory |
 
+Explanatory and response names must be unique within each table. The magnitude
+result reserves `freq`, `cost`, `status`, `lower` and `upper` for diagnostics;
+rename colliding source columns before calling `protect()`. Invalid names and
+suppression sequences whose length is neither 1 nor the table count raise
+`ValueError` before any input files are written.
+
 Metadata and table options include `weight_var`, `weighted`, `holding_var`,
 `decimals`, `hrc`, `totcode`, `missing` and `codelist`; see `help(protect)`.
 The high-level API requires a numeric response column; frequency-only tables
@@ -241,6 +250,8 @@ The `lower` / `upper` columns in the default result are protection levels;
 realized bounds are returned by `audit()`. `TableResult` is a parsed snapshot
 and does not refresh when the engine is audited or modified. Raw intermediates
 and audit reports contain original values and belong with analyst artifacts.
+The list-of-dicts fallback from `dataframe()` is a defensive copy, so editing
+it does not change the result's subsequent `safe()` or `status()` values.
 
 ### Existing batches and individual commands
 

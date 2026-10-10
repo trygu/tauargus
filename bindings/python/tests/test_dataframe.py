@@ -193,3 +193,52 @@ def test_frame_lib_consistency():
     assert (has_frame_lib() is True) == (lib is not None)
     if lib is not None:
         assert lib in ("pandas", "polars")
+
+
+@pytest.mark.parametrize("columns", [
+    {"A": [1], "B": [2, 3]}, {"B": [2, 3], "A": [1]},
+    {"A": [], "B": [1]}, {"B": [1], "A": []},
+])
+def test_dict_rejects_unequal_column_lengths(columns):
+    with pytest.raises(ValueError, match="same length"):
+        to_microdata(columns)
+
+
+@pytest.mark.parametrize("records", [
+    [{"A": 1}, {"B": 2, "A": 3}],
+    [{"B": 2, "A": 3}, {"A": 1}],
+])
+def test_records_preserve_later_keys_and_missing_fields(records):
+    result = to_microdata(records)
+    assert list(result) == list(dict.fromkeys(k for row in records for k in row))
+    for column in ("A", "B"):
+        assert result[column] == [row.get(column) for row in records]
+
+
+@pytest.mark.parametrize("kind", ["pandas", "generic"])
+def test_frame_reads_original_non_string_labels(kind):
+    columns = {1: [10, 20], ("group", 2): ["a", "b"]}
+    if kind == "pandas":
+        frame = pytest.importorskip("pandas").DataFrame(columns)
+    else:
+        class Frame:
+            def __init__(self):
+                self.columns = list(columns)
+
+            def __getitem__(self, key):
+                return columns[key]
+        frame = Frame()
+    assert to_microdata(frame) == {"1": [10, 20], "('group', 2)": ["a", "b"]}
+
+
+@pytest.mark.parametrize("data", [{1: [10], "1": [20]}, [{1: 10, "1": 20}]])
+def test_rejects_names_colliding_after_string_conversion(data):
+    with pytest.raises(ValueError, match="unique.*string"):
+        to_microdata(data)
+
+
+@pytest.mark.parametrize("labels", [[1, "1"], ["A", "A"]])
+def test_pandas_rejects_duplicate_normalized_names(labels):
+    pd = pytest.importorskip("pandas")
+    with pytest.raises(ValueError, match="unique.*string"):
+        to_microdata(pd.DataFrame([[10, 20]], columns=labels))

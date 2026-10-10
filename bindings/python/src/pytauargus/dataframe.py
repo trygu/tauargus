@@ -79,6 +79,19 @@ def _is_sequence(v):
     )
 
 
+def _column_names(columns):
+    names = [str(column) for column in columns]
+    if len(set(names)) != len(names):
+        raise ValueError("Column names must be unique after string conversion")
+    return names
+
+
+def _checked_microdata(columns):
+    if len({len(values) for values in columns.values()}) > 1:
+        raise ValueError("Microdata columns must all have the same length")
+    return columns
+
+
 def to_microdata(df) -> Dict[str, list]:
     """Convert a DataFrame-like object to the microdata ``dict[str, list]``.
 
@@ -89,7 +102,10 @@ def to_microdata(df) -> Dict[str, list]:
     * a ``dict`` of column -> list/tuple (returned after normalising values),
     * a ``list`` of row ``dict`` (transposed to column -> list).
 
-    Raises ``TypeError`` for anything else.
+    Column names are converted to strings and must remain unique. Column
+    lengths must match; row dicts use all keys, in first-seen order, with
+    missing fields set to ``None``. Invalid shapes raise ``ValueError``.
+    Raises ``TypeError`` for unsupported inputs.
     """
     if df is None:
         raise TypeError("microdata must not be None")
@@ -98,14 +114,14 @@ def to_microdata(df) -> Dict[str, list]:
     if isinstance(df, dict):
         cols = list(df)
         out: Dict[str, list] = {}
-        for c in cols:
+        for c, name in zip(cols, _column_names(cols)):
             vals = df[c]
             if not _is_sequence(vals):
                 raise TypeError(
                     "microdata dict values must be list/tuple per column; "
                     f"column {c!r} has {type(vals).__name__}")
-            out[str(c)] = [_norm_scalar(v) for v in vals]
-        return out
+            out[name] = [_norm_scalar(v) for v in vals]
+        return _checked_microdata(out)
 
     # list of row dicts
     if isinstance(df, (list, tuple)):
@@ -115,11 +131,12 @@ def to_microdata(df) -> Dict[str, list]:
             raise TypeError(
                 "a list microdata must be a list of row dicts; got "
                 f"{type(df[0]).__name__}")
-        keys = list(df[0])
-        out = {str(k): [] for k in keys}
+        keys = list(dict.fromkeys(k for row in df for k in row))
+        names = _column_names(keys)
+        out = {name: [] for name in names}
         for r in df:
-            for k in keys:
-                out[str(k)].append(_norm_scalar(r.get(k)))
+            for k, name in zip(keys, names):
+                out[name].append(_norm_scalar(r.get(k)))
         return out
 
     # DataFrame duck-type: has .columns and a per-column accessor
@@ -129,29 +146,30 @@ def to_microdata(df) -> Dict[str, list]:
             "microdata must be a dict of lists, a list of dicts, "
             f"or a DataFrame with .columns (got {type(df).__name__})")
 
-    colnames = [str(c) for c in columns]
+    columns = list(columns)
+    colnames = _column_names(columns)
     mod = type(df).__module__ or ""
     if mod.startswith("polars"):
         out = {}
-        for c in colnames:
+        for c, name in zip(columns, colnames):
             series = df[c]
-            out[c] = [_norm_scalar(v) for v in series.to_list()]
-        return out
+            out[name] = [_norm_scalar(v) for v in series.to_list()]
+        return _checked_microdata(out)
     if hasattr(df, "to_dict"):
         raw = df.to_dict(orient="list")
         out = {}
-        for c in colnames:
-            out[c] = [_norm_scalar(v) for v in raw[c]]
-        return out
+        for c, name in zip(columns, colnames):
+            out[name] = [_norm_scalar(v) for v in raw[c]]
+        return _checked_microdata(out)
 
     # last resort: generic column accessor df[col]
     out = {}
-    for c in colnames:
+    for c, name in zip(columns, colnames):
         col = df[c]
         if not _is_sequence(col):
             col = list(col)
-        out[c] = [_norm_scalar(v) for v in col]
-    return out
+        out[name] = [_norm_scalar(v) for v in col]
+    return _checked_microdata(out)
 
 
 def has_frame_lib() -> bool:

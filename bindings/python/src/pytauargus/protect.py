@@ -30,6 +30,7 @@ from typing import Dict, List, Optional, Sequence, Union
 from pytauargus.dataframe import to_microdata
 from pytauargus.micro import micro_asc_rda
 from pytauargus.arb import micro_arb
+from pytauargus.result import TableResult, _validate_columns
 
 __all__ = ["protect", "ProtectResult"]
 
@@ -108,6 +109,9 @@ def protect(microdata,
         The response variable name (a numeric column). Recycled across tables
         unless a per-table list is given. Required: the high-level API does not
         support the ``<freq>`` magic response.
+        Explanatory/response names must be unique within each table and cannot
+        use the result diagnostic names ``freq``, ``cost``, ``status``,
+        ``lower`` or ``upper``. Rename colliding source columns first.
     safety_rules:
         Safety rule string (e.g. ``"P(25)"``) or per-table list. ``None`` -> no
         rules (``""`` -> "use given status").
@@ -115,6 +119,8 @@ def protect(microdata,
         Suppression spec (e.g. ``"OPT(1)"``) or per-table list. A *single*
         string has its table number (first parenthesised argument) recalculated
         to 1, 2, 3... per table. Default ``"OPT(1)"`` (optimal suppression).
+        Sequence length must be 1 or the table count; invalid lengths fail
+        before generating any files.
     workdir:
         Directory for all intermediate files. Defaults to a fresh tempdir (kept,
         so the result ``.tab`` files stay readable; delete it when done).
@@ -133,6 +139,13 @@ def protect(microdata,
     micro = to_microdata(microdata)
     tab_specs = _normalise_tables(tables)
     n = len(tab_specs)
+    resp_per_tab = _recycle(response, n)
+    for explanatory, response_name in zip(tab_specs, resp_per_tab):
+        _validate_columns(explanatory, response_name)
+    # Preserve the generator's single-spec table-number rewriting semantics.
+    suppr = "OPT(1)" if suppress is None else suppress
+    if isinstance(suppr, (list, tuple)) and len(suppr) not in (1, n):
+        raise ValueError("suppress sequence length must be 1 or the number of tables")
 
     if workdir is None:
         workdir = tempfile.mkdtemp(prefix="pytauargus_")
@@ -162,8 +175,6 @@ def protect(microdata,
     # safety_rules: None -> "" (empty rule = use given status); a single string
     # is recycled across tables by micro_arb.
     sr = "" if safety_rules is None else safety_rules
-    # micro_arb always emits a <SUPPRESS>; None falls back to the default.
-    suppr = "OPT(1)" if suppress is None else suppress
     micro_arb(arb_filename=arb,
               asc_filename=asc,
               rda_filename=rda,
@@ -192,8 +203,6 @@ def protect(microdata,
     eng = run_batch(arb)
     result.engine = eng
 
-    from pytauargus.result import TableResult
-    resp_per_tab = _recycle(response, n)
     for i in range(n):
         rt = TableResult(path=output_names[i],
                          exp_vars=tab_specs[i],

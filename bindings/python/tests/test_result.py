@@ -11,6 +11,8 @@ views without a native engine.
 
 import pytest
 
+import pytauargus.dataframe as dataframe_module
+
 from pytauargus.result import (
     TableResult,
     parse_simple_tab,
@@ -33,6 +35,47 @@ FREQ1 = (
     '"C1";5.00;1.00;S;0.50;5.50\n'
     '"C2";3.00;1.00;S;0.30;3.30\n'
 )
+
+
+@pytest.mark.parametrize("name", ["cost", "status", "lower", "upper", "freq"])
+@pytest.mark.parametrize("role", ["response", "explanatory"])
+def test_parser_rejects_diagnostic_name_collisions(tmp_path, name, role):
+    path = _write(tmp_path, "m.tab", MAG2)
+    explanatory = [name, "Y"] if role == "explanatory" else ["X", "Y"]
+    response = name if role == "response" else "Val"
+    with pytest.raises(ValueError, match="reserved"):
+        parse_simple_tab(path, explanatory, response)
+
+
+@pytest.mark.parametrize("explanatory,response", [
+    (["X", "X"], "Val"), (["X", "Y"], "X"),
+])
+def test_parser_rejects_duplicate_source_names(tmp_path, explanatory, response):
+    path = _write(tmp_path, "m.tab", MAG2)
+    with pytest.raises(ValueError, match="unique"):
+        parse_simple_tab(path, explanatory, response)
+
+
+def test_frequency_response_can_be_named_freq(tmp_path):
+    result = TableResult(_write(tmp_path, "f.tab", FREQ1), ["X"], "freq", is_freq=True)
+    assert result.unsafe() == [5.0, 3.0]
+    assert result.columns.count("freq") == 1
+
+
+def test_from_rows_rejects_reserved_names():
+    with pytest.raises(ValueError, match="reserved"):
+        TableResult.from_rows([], ["X"], "status")
+
+
+def test_dataframe_fallback_does_not_mutate_result(monkeypatch, tmp_path):
+    monkeypatch.setattr(dataframe_module, "frame_lib", lambda: None)
+    result = TableResult(_write(tmp_path, "m.tab", MAG2), ["X", "Y"], "Val")
+    frame = result.dataframe()
+    frame[0]["Val"] = -999
+    frame[1]["status"] = "S"
+    assert result.unsafe() == [100.0, 20.0, 5.0, 0.0]
+    assert result.status() == ["S", "U", "M", "E"]
+    assert result.safe() == [100.0, "x", "x", 0.0]
 
 
 def _write(tmp_path, name, text):

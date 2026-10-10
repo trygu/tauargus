@@ -45,6 +45,20 @@ ST_EMPTY = "E"
 _WITHHOLD = (ST_UNSAFE, ST_SECONDARY)
 
 
+def _validate_columns(exp_vars, response, is_freq=False):
+    names = [str(name) for name in exp_vars] + [str(response)]
+    if len(set(names)) != len(names):
+        raise ValueError("Explanatory and response column names must be unique")
+    reserved = {"cost", "status", "lower", "upper"}
+    if not is_freq:
+        reserved.add("freq")
+    collisions = sorted(reserved.intersection(names))
+    if collisions:
+        raise ValueError(
+            f"Table column names are reserved for result diagnostics: {collisions}; "
+            "rename these source columns before protecting the table")
+
+
 def parse_simple_tab(path: Union[str, Path],
                      exp_vars: Sequence[str],
                      response: str,
@@ -55,6 +69,7 @@ def parse_simple_tab(path: Union[str, Path],
     ``response`` names the published-value column; ``is_freq`` tells the parser
     whether the response is a frequency table (no ``freq`` column).
     """
+    _validate_columns(exp_vars, response, is_freq)
     n_exp = len(exp_vars)
     rows: List[Dict[str, object]] = []
     with open(path, "r", encoding="utf-8") as fh:
@@ -129,6 +144,7 @@ class TableResult:
                   response: str,
                   is_freq: bool = False) -> "TableResult":
         """Build a result from already-parsed row dicts (e.g. for tests)."""
+        _validate_columns(exp_vars, response, is_freq)
         obj = cls.__new__(cls)
         obj._path = None
         obj._exp = [str(v) for v in exp_vars]
@@ -190,7 +206,7 @@ class TableResult:
         Returns a ``pandas.DataFrame`` if pandas is importable, a
         ``polars.DataFrame`` if only polars is, else the ``rows`` list.
         """
-        return make_frame(self._rows)
+        return make_frame(self.rows)
 
     def __len__(self) -> int:
         return len(self._rows)

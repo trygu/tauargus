@@ -106,6 +106,38 @@ def test_requires_response():
                 workdir="/tmp")
 
 
+@pytest.mark.parametrize("suppress,n_tables", [
+    ([], 1), (["OPT(1)", "MOD(2)"], 1),
+    (["OPT(1)", "MOD(2)"], 3), (["OPT(1)", "MOD(2)", "OPT(3)"], 2),
+])
+def test_invalid_suppression_lengths_fail_before_writing(tmp_path, suppress, n_tables):
+    workdir = tmp_path / "unwritten"
+    with pytest.raises(ValueError, match="suppress.*length"):
+        protect(MICRO, [["Region"]] * n_tables, "Var2", suppress=suppress,
+                workdir=workdir, run=False)
+    assert not workdir.exists()
+
+
+@pytest.mark.parametrize("suppress", ["OPT(1,9)", ["OPT(1,9)"], ("OPT(1,9)",)])
+def test_single_suppression_recalculates_every_table_number(tmp_path, suppress):
+    result = protect(MICRO, [["Region"], ["Size"]], "Var2", suppress=suppress,
+                     workdir=tmp_path, run=False)
+    batch = Path(result.files["arb"]).read_text()
+    assert "<SUPPRESS> OPT(1,9)" in batch
+    assert "<SUPPRESS> OPT(2,9)" in batch
+    assert batch.count("<WRITETABLE>") == 2
+
+
+@pytest.mark.parametrize("role", ["response", "explanatory"])
+def test_reserved_table_names_fail_before_writing(tmp_path, role):
+    workdir = tmp_path / "unwritten"
+    response = ["Var2", "cost"] if role == "response" else "Var2"
+    tables = [["Region"], ["status" if role == "explanatory" else "Size"]]
+    with pytest.raises(ValueError, match="reserved"):
+        protect(MICRO, tables, response, workdir=workdir, run=False)
+    assert not workdir.exists()
+
+
 def test_accepts_list_of_dicts(tmp_path):
     rows = [{"Region": r, "Size": s, "Var2": v}
             for (r, s), v in zip(zip(MICRO["Region"], MICRO["Size"]),
