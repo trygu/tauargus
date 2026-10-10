@@ -63,7 +63,7 @@ Paths in a batch file are relative to the working directory.
 
 ```text
 <OPENMICRODATA> "tau_testW.asc"
-<OPENMETADATA>  "Tau_TestW.rda"
+<OPENMETADATA>  "tau_testW.rda"
 <SPECIFYTABLE>  "Size""Region"|"Var2"||
 <SAFETYRULE>    NK(2,75)|NK(0,0)
 <READMICRODATA>
