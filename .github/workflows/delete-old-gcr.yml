@@ -1,0 +1,53 @@
+# One-shot: permanently delete the old GHCR container package
+# `trygu/tauargus` (renamed to `trygu/tauargus-engine` in 0.2.1).
+#
+# Run manually from Actions once the new image is verified:
+#   gh workflow run delete-old-gcr.yml
+# (or the web UI). Deleting a container package removes every version of it.
+
+name: delete-old-gcr
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type the package name to delete (no spaces)"
+        required: true
+        default: "trygu/tauargus"
+
+permissions:
+  packages: write
+
+jobs:
+  delete:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Guard
+        run: |
+          set -euo pipefail
+          [ "$INPUTS" = "trygu/tauargus" ] || {
+            echo "::error::confirm input must be exactly 'trygu/tauargus'"; exit 1; }
+        env:
+          INPUTS: ${{ inputs.confirm }}
+
+      - name: Delete package (all versions)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # find the exact package by name (skip the -engine one)
+          id=""
+          for page in 1 2 3; do
+            hit=$(gh api "/user/packages?package_type=container&per_page=100&page=$page" \
+              --jq '.[] | select(.name=="trygu/tauargus") | .id')
+            [ -n "$hit" ] && id=$hit && break
+          done
+          [ -n "$id" ] || { echo "package trygu/tauargus not found (already deleted?)"; exit 0; }
+          echo "deleting package id=$id (trygu/tauargus)"
+          # delete every version, then the package itself
+          for v in $(gh api "/user/packages/$id/versions?per_page=100" --jq '.[].id'); do
+            echo "  deleting version $v"
+            gh api -X DELETE "/user/packages/$id/versions/$v"
+          done
+          gh api -X DELETE "/user/packages/$id"
+          echo "done"

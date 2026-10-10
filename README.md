@@ -1,36 +1,95 @@
-# τ-ARGUS (native engine + CLI)
+# tauargus-engine
 
-A native, headless rewrite of **τ-ARGUS**, the statistical disclosure control
-(SDC) tool statistics agencies use to protect tabular data before publication.
-It ships as the `tauargus` command-line tool and the `pytauargus` Python
-package, and aims to be a drop-in replacement for legacy τ-ARGUS 4.1 batch
-runs: same `.arb` batch files, same file I/O, same outputs.
+Native, headless engine for statistical disclosure control (SDC) of tabular
+data, plus a Python tool that drives it. It is a drop-in replacement for the
+batch mode of legacy Tau-Argus 4.1: same `.arb` batch files, file formats and
+outputs, without the GUI.
 
-- Runs `.arb` batch files without a GUI, so it suits servers and pipelines.
-- Uses the open-source [HiGHS](https://github.com/ERGO-Code/HiGHS) solver. The
-  legacy CPLEX, XPRESS and SCIP backends are gone.
-- Self-contained wheels bundle HiGHS and the engine libraries.
+The project has two parts:
+
+- **tauargus-engine** (`engine/`): the C/C++ libraries that do the work, built
+  against the open-source [HiGHS](https://github.com/ERGO-Code/HiGHS) solver.
+  The legacy CPLEX, XPRESS and SCIP backends are gone.
+- **pytauargus** (`bindings/python/`): the Python package and `tauargus`
+  command-line tool that link those libraries. Wheels bundle HiGHS and the
+  engine.
+
+## Relationship to the original Tau-Argus
+
+This is the original Tau-Argus solver code, not a reimplementation:
+
+- **Engine:** the C/C++ code is largely unchanged. The changes make it build
+  with a modern toolchain (CMake, current GCC/Clang/MSVC), switch the solver
+  backend to HiGHS, and make it self-contained.
+- **Audit:** the standalone `intervalle.exe` audit program (Delphi, i.e. modern Pascal) is ported
+  into the `csp` engine module, so the feasibility-interval audit runs in-process
+  instead of as a separate executable.
+- **Python package:** `pytauargus` is new. Its function signatures and way of
+  working are borrowed from [rtauargus](https://github.com/InseeFrLab/rtauargus),
+  the R wrapper around Tau-Argus.
 
 ## Install
 
-Download a wheel for your platform from the
-[GitHub Releases](https://github.com/trygu/tauargus/releases) page, then:
+From [PyPI](https://pypi.org/project/pytauargus/):
 
 ```bash
-uv tool install ./pytauargus-*.whl     # or: pipx install ./pytauargus-*.whl
+pip install pytauargus          # into the current environment
+uv tool install pytauargus      # or: pipx install pytauargus (isolated, puts `tauargus` on PATH)
 tauargus --version
 ```
 
-Wheels are built for Python 3.10–3.13 on:
+Use it from Python as well:
+
+```python
+from pytauargus.engine import run_batch
+
+run_batch("mybatch.arb")
+```
+
+Wheels bundle HiGHS and the engine libraries, so nothing else needs installing.
+They are built for Python 3.10-3.13 on:
 
 | Platform | Architecture |
 |----------|--------------|
-| macOS    | arm64 (3.10–3.13), x86_64 (3.12–3.13) |
-| Linux (manylinux2014) | x86_64 |
+| macOS    | arm64 (Apple Silicon) |
+| Linux (manylinux_2_28) | x86_64, aarch64 |
 | Windows  | x64 |
 
-Linux ARM and Windows ARM are not built. Wheels are also published to PyPI
-when the maintainers enable it; otherwise use the Releases page.
+Intel Macs and Windows ARM are not built, and there is no source
+distribution; on those platforms see [Building from source](#building-from-source).
+The same wheels are attached to each
+[GitHub Release](https://github.com/trygu/tauargus/releases).
+
+## Cloud native
+
+Built to run unattended in containers, CI and batch services:
+
+- **Headless:** no GUI, no display, no interactive prompts.
+- **Self-contained:** one `pip install`; the solver (HiGHS) and native libraries
+  are bundled in the wheel. No licensed solver, license server, system packages
+  or Windows registry.
+- **Stateless:** input and output are plain files in the working directory;
+  scratch files go to the system temp directory.
+- **Scriptable:** success is exit code 0; errors go to stderr with a non-zero
+  exit code.
+- **Portable:** wheels for Linux (manylinux_2_28, so any glibc 2.28+ image such
+  as `python:3.x-slim`), macOS arm64 and Windows x64.
+
+A ready-made image is published to GitHub Container Registry with each release
+(linux/amd64 and linux/arm64):
+
+```bash
+docker run --rm -v "$PWD":/work ghcr.io/trygu/tauargus-engine run batch.arb
+```
+
+Pin a version with `ghcr.io/trygu/tauargus-engine:0.2.1`. To build your own image:
+
+```dockerfile
+FROM python:3.12-slim
+RUN pip install --no-cache-dir pytauargus
+WORKDIR /work
+ENTRYPOINT ["tauargus"]
+```
 
 ## Quick start
 
@@ -50,19 +109,65 @@ tauargus save     mybatch.arb    # compute, then write tables
 tauargus tables   mybatch.arb    # print a table summary
 ```
 
+`<SOLVER>` tags in a batch file are accepted, but only HiGHS is used; any
+other solver name logs a warning and the job continues.
+
 Sample batches and fixtures are in [data/](data). The batch grammar, file
-formats and parameters follow the legacy τ-ARGUS 4.1 manual, which is bundled
+formats and parameters follow the legacy Tau-Argus 4.1 manual, which is bundled
 in [docs/](docs).
 
-## What τ-ARGUS does
+## Writing batch inputs
 
-It reduces the risk that published tables disclose information about
+Beyond running batches, `pytauargus` can *generate* them. The generator is a
+port of [rtauargus](https://github.com/InseeFrLab/rtauargus), the R wrapper, so
+it emits the exact file formats the engine reads:
+
+```python
+from pytauargus.arb import micro_arb
+
+# writes a .arb batch: two tables (REGION, then SEXE) of the response var CA
+micro_arb(
+    asc_filename="donnees.asc",
+    explanatory_vars=[["REGION"], ["SEXE"]],
+    response_var="CA",
+    safety_rules=["NK(1,85)", "FREQ(3,10)"],
+    suppress="GH(.,100)",
+    output_names=["tab1.csv", "tab2.csv"],
+)
+```
+
+`pytauargus.hrc.write_hrc` produces `.hrc` hierarchy files and
+`pytauargus.rda.write_rda` writes `.rda` metadata text. The generator does not
+produce the fixed-width `.asc` microdata file itself (that step stays in your
+pipeline); it references it by name.
+
+## Example notebooks
+
+[bindings/python/notebooks/](bindings/python/notebooks/) contains three
+**executed, output-saved** notebooks that double as API documentation:
+
+1. [`01_quickstart`](bindings/python/notebooks/01_quickstart.ipynb) — the data,
+   `parse_rda`, `run_batch`, table and cell inspection.
+2. [`02_protection_and_audit`](bindings/python/notebooks/02_protection_and_audit.ipynb)
+   — safety rules → OPT/MOD/RND suppression → `audit()` feasibility intervals
+   (the ported Intervalle) → export.
+3. [`03_generators`](bindings/python/notebooks/03_generators.ipynb) —
+   `micro_arb` / `write_rda` / `write_hrc`, and a generate→run round-trip.
+
+Headless execution (no Jupyter needed):
+`uv run --with nbclient --with nbformat --with ipykernel python notebooks/_run.py`
+(from `bindings/python/`). See
+[the Python README](bindings/python/README.md#example-notebooks) for details.
+
+## What it does
+
+SDC reduces the risk that published tables disclose information about
 individual respondents or businesses. A cell can be sensitive because too few
 respondents contribute, a few dominate, or another contributor could estimate
 a contribution. Deleting the value is often not enough, because totals and
-bounds can reveal it, so τ-ARGUS also protects related cells. It is the
-tabular counterpart to [μ-ARGUS](https://github.com/INSEE/Argus), which
-protects microdata.
+bounds can reveal it, so related cells are protected too. This is the tabular
+counterpart to [mu-Argus](https://github.com/INSEE/Argus), which protects
+microdata.
 
 A batch file drives the whole pipeline:
 
@@ -76,10 +181,37 @@ input data + metadata
   -> write release table + report
 ```
 
+## Audit (Intervalle)
+
+After suppression, each suppressed cell still has a *range* of values it could
+take and stay consistent with the published totals: its **realized lower and
+upper bounds** (the *feasibility interval*). A suppressed cell is only truly
+protected if that interval is small enough that the original value is no longer
+reconstructible; a wide interval means the cell is still effectively *unsafe*.
+
+In legacy Tau-Argus this was a **separate program** — `intervalle.exe`, a
+standalone Delphi/Pascal executable. Tau-Argus wrote a `.JJ` file, launched the
+executable externally, and read the intervals back. The operator had to install
+it and keep it on the path, so it was the one part of the pipeline that did not
+run in-process.
+
+The rewrite folds it in: the audit logic is ported into the `csp` engine module
+(`TauAuditJj`), so it runs in-process over a temporary `.JJ` file and needs
+nothing external. Use it three ways:
+
+- **CLI:** `tauargus audit mybatch.arb` — compute, suppress, then report each
+  suppressed cell's realized interval and whether it is still unsafe.
+- **Python:** `engine.audit(tab)` — returns one row per suppressed cell
+  (`cell`, `min`, `max`, `value`, `status`, `unsafe`); the realized bounds are
+  also stored on the table and readable via `get_table_cell`.
+- **Export:** `tauargus save mybatch.arb --audit --format intermediate` writes
+  the legacy INTERMEDIATE (type-5) audit file, including the realized-interval
+  columns.
+
 ## Architecture
 
 ```
-.arb batch  ->  tauargus CLI  ->  pytauargus  ->  native C++ engine  ->  HiGHS
+.arb batch  ->  tauargus CLI  ->  pytauargus  ->  tauargus-engine (C/C++)  ->  HiGHS
 ```
 
 The engine is C++11, built from five git submodules under `engine/native/`:
@@ -98,7 +230,7 @@ The engine is C++11, built from five git submodules under `engine/native/`:
 ├── bindings/
 │   └── python/  pybind11 bindings (cpp/), pytauargus package (src/), tests/
 ├── data/        sample .arb batches and tabular fixtures
-├── docs/        legacy τ-ARGUS 4.1 manual and design notes
+├── docs/        legacy Tau-Argus 4.1 manual and design notes
 └── src/         legacy Java/Swing front-end (read-only, pending removal)
 ```
 
@@ -144,7 +276,7 @@ uv run pytest
 ## License
 
 Distributed under the European Union Public Licence (EUPL) v1.2; see
-[LICENSE](LICENSE). τ-ARGUS is © Statistics Netherlands, with contributions
+[LICENSE](LICENSE). Tau-Argus is © Statistics Netherlands, with contributions
 from the original author teams of each solver module.
 
 This software is provided "AS IS", without warranties or conditions of any

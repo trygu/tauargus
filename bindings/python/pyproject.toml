@@ -4,14 +4,30 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "pytauargus"
-version = "0.1.0"
+version = "0.2.1"
 description = "Tau-Argus: Statistical Disclosure Control, open-source solvers (HiGHS) + Python CLI"
 requires-python = ">=3.10"
+readme = "README.md"
 license = { text = "EUPL-1.2" }
+keywords = ["statistical disclosure control", "SDC", "tabular data", "cell suppression", "controlled rounding", "HiGHS"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: C++",
+]
 dependencies = []
 
 [project.optional-dependencies]
 test = ["pytest"]
+# Interactive examples + headless execution of the notebooks/ directory.
+notebooks = ["jupyterlab", "nbclient", "nbformat", "ipykernel"]
+
+[project.urls]
+Homepage = "https://github.com/trygu/tauargus"
+Repository = "https://github.com/trygu/tauargus"
+Issues = "https://github.com/trygu/tauargus/issues"
 
 [project.scripts]
 tauargus = "pytauargus.cli:main"

@@ -193,3 +193,37 @@ class TestErrorHandling:
                 parse_batch(path)
         finally:
             os.unlink(path)
+
+
+class TestSolverCommand:
+    """Only HiGHS is supported; other solver names warn instead of failing."""
+
+    @staticmethod
+    def _parse(tmp_path, line):
+        arb = tmp_path / "s.arb"
+        arb.write_text(line + "\n")
+        return parse_batch(arb)
+
+    @pytest.mark.parametrize("name", ["HIGHS", "highs", "FREE", "CPLEX", "XPRESS", "GUROBI"])
+    def test_parser_accepts_any_solver_name(self, tmp_path, name):
+        (cmd,) = self._parse(tmp_path, f"<SOLVER> {name}")
+        assert cmd.name == name.upper()
+
+    @pytest.mark.parametrize("name", ["CPLEX", "XPRESS", "GUROBI"])
+    def test_engine_warns_for_unsupported_solver(self, tmp_path, caplog, name):
+        from pytauargus.engine import Engine
+
+        (cmd,) = self._parse(tmp_path, f'<SOLVER> {name},"lic.txt"')
+        with caplog.at_level("WARNING", logger="pytauargus.engine"):
+            Engine()._execute(cmd)
+        msgs = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+        assert any(name in m and "HiGHS" in m for m in msgs)
+
+    @pytest.mark.parametrize("name", ["HIGHS", "FREE"])
+    def test_engine_silent_for_supported_solver(self, tmp_path, caplog, name):
+        from pytauargus.engine import Engine
+
+        (cmd,) = self._parse(tmp_path, f"<SOLVER> {name}")
+        with caplog.at_level("WARNING", logger="pytauargus.engine"):
+            Engine()._execute(cmd)
+        assert not [r for r in caplog.records if r.levelname == "WARNING"]

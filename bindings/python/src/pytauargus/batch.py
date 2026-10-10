@@ -663,8 +663,6 @@ def parse_batch(path: Union[str, Path]) -> List[Command]:
         elif token == "<SOLVER>":
             name = tok.next_field(",").upper()
             lic = tok.next_field(",")
-            if name not in ("XPRESS", "CPLEX", "FREE"):
-                raise BatchError(f"Unknown solver ({name}) selected")
             commands.append(Solver(name=name, license_file=_unquote(lic)))
         elif token == "<GOINTERACTIVE>":
             commands.append(GoInteractive())

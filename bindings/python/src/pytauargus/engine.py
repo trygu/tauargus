@@ -2141,7 +2141,11 @@ class Engine:
             self._audit = {}
             logger.info("Cleared state.")
         elif isinstance(cmd, Solver):
-            logger.info("Solver %s: all backends use HiGHS (license ignored).", cmd.name)
+            if cmd.name not in ("HIGHS", "FREE"):
+                logger.warning(
+                    "Solver %s is not supported; using HiGHS instead (license ignored).",
+                    cmd.name,
+                )
         elif isinstance(cmd, Apriory):
             self.apply_apriori(cmd)
         elif isinstance(cmd, Cover):

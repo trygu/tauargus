@@ -39,19 +39,22 @@ elseif(UNIX)
     set(EXT_BUILD_RPATH "${NATIVE_LIB_DIR};$ORIGIN")
     set(EXT_INSTALL_RPATH "$ORIGIN")
 elseif(WIN32)
+    # Visual Studio is multi-config: the superbuild puts outputs in <dir>/Release.
+    set(WIN_LIB_DIR ${NATIVE_LIB_DIR}/Release)
+    set(WIN_BIN_DIR ${NATIVE_LIB_DIR}/../bin/Release)
     set(ENGINE_SHARED
-        ${NATIVE_LIB_DIR}/tauargus_csp.lib
-        ${NATIVE_LIB_DIR}/tauargus_hitas.lib
-        ${NATIVE_LIB_DIR}/tauargus_rounder.lib
-        ${NATIVE_LIB_DIR}/CRP.lib)
-    set(ENGINE_STATIC ${NATIVE_LIB_DIR}/tauargus_core.lib)
+        ${WIN_LIB_DIR}/tauargus_csp.lib
+        ${WIN_LIB_DIR}/tauargus_hitas.lib
+        ${WIN_LIB_DIR}/tauargus_rounder.lib
+        ${WIN_LIB_DIR}/CRP.lib)
+    set(ENGINE_STATIC ${WIN_LIB_DIR}/tauargus_core.lib)
     set(ENGINE_RUNTIME_DLLS
-        ${NATIVE_LIB_DIR}/../bin/tauargus_csp.dll
-        ${NATIVE_LIB_DIR}/../bin/tauargus_hitas.dll
-        ${NATIVE_LIB_DIR}/../bin/tauargus_rounder.dll
-        ${NATIVE_LIB_DIR}/../bin/CRP.dll)
+        ${WIN_BIN_DIR}/tauargus_csp.dll
+        ${WIN_BIN_DIR}/tauargus_hitas.dll
+        ${WIN_BIN_DIR}/tauargus_rounder.dll
+        ${WIN_BIN_DIR}/CRP.dll)
     set(BUNDLE_LIBS ${ENGINE_RUNTIME_DLLS})
-    set(EXT_BUILD_RPATH "${NATIVE_LIB_DIR}/../bin")
+    set(EXT_BUILD_RPATH "${WIN_BIN_DIR}")
     set(EXT_INSTALL_RPATH "")
 else()
     message(FATAL_ERROR "Unsupported platform for pytauargus build")
