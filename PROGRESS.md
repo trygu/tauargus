@@ -16,9 +16,9 @@ Goal: HiGHS solvers, portable cloud-native build, headless Python CLI.
 - [x] DataFrame examples in all three notebooks and both READMEs refreshed.
   37 executed code cells; relative-workdir regression fixed; 219 tests pass.
 
-## Current review — draft PR #5 to `master`
-- Prepared-table guard and attribution updates are documented in ARCHIVE.md.
-  PR #5 includes rtauargus and PiArgus acknowledgements in both READMEs.
+## Current review — PR #5 to `master`
+- All eight findings fixed; 36 new API regressions + 3 saved-output checks
+  pass. 37 notebook cells re-executed; completed details are in ARCHIVE.md.
 
 ## Next (priority order)
 1. **GHCR rename → `tauargus-engine`** — 0.2.1 verified. Delete old

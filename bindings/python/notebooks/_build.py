@@ -70,6 +70,14 @@ DATA = next(
 )
 OUT = _here / "out"          # scratch dir for notebook outputs (gitignored)
 OUT.mkdir(exist_ok=True)
+
+def display_paths(text):
+    """Use portable paths in displayed text; engine inputs keep real paths."""
+    text = str(text)
+    for path, label in ((OUT, "./out"), (DATA, "<repo>/data")):
+        text = text.replace(str(path), label).replace(path.as_posix(), label)
+    return text
+
 print(f"pytauargus {pytauargus.__version__}")
 print("data : <repo>/data")
 print("out  : ./out")
@@ -654,7 +662,7 @@ from pytauargus.batch import WriteTable
 
 csv_path = str(OUT / "table1.csv")
 eng.write_table(WriteTable(tab_no=1, output_type=1, file=csv_path))
-print(f"wrote {csv_path} ({(OUT / 'table1.csv').stat().st_size} bytes)")
+print(f"wrote {display_paths(csv_path)} ({(OUT / 'table1.csv').stat().st_size} bytes)")
 print()
 print("\\n".join((OUT / "table1.csv").read_text().splitlines()[:5]))
 '''),
@@ -662,7 +670,7 @@ print("\\n".join((OUT / "table1.csv").read_text().splitlines()[:5]))
 tab_path = OUT / "table1.tab"
 eng.write_intermediate_table(0, str(tab_path), with_audit=True)
 lines = tab_path.read_text().splitlines()
-print(f"wrote {tab_path} ({tab_path.stat().st_size} bytes, {len(lines) - 1} rows)")
+print(f"wrote {display_paths(tab_path)} ({tab_path.stat().st_size} bytes, {len(lines) - 1} rows)")
 print()
 print(f"header: {lines[0][:100]}…")
 print(f"row 1:  {lines[1][:100]}…")
@@ -818,10 +826,10 @@ res = micro_arb(
     output_names=["out1.csv", "out2.csv"],
     output_type="1",             # CSV (the generator default is SBS/type 4)
 )
-print(res)
+print({**res, "arb_filename": display_paths(res["arb_filename"])})
 print()
 print("=== generated demo.arb ===")
-print((OUT / "demo.arb").read_text())
+print(display_paths((OUT / "demo.arb").read_text()))
 '''),
 
     md(
@@ -841,7 +849,7 @@ res2 = micro_arb(
     suppress="MOD(.,0)",
     output_names=["s1.csv", "s2.csv"],
 )
-print((OUT / "demo2.arb").read_text())
+print(display_paths((OUT / "demo2.arb").read_text()))
 '''),
 
     md(
@@ -932,7 +940,7 @@ with warnings.catch_warnings():
         hrc_filename=str(OUT / "geo.hrc"),
     )
 
-print(f"wrote {hrc_path}")
+print(f"wrote {display_paths(hrc_path)}")
 print()
 print((OUT / "geo.hrc").read_text())
 '''),

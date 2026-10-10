@@ -388,3 +388,25 @@ the `.rda` writer. No `.tab`/`.hst` generator, no native `.hrc` getter
   to InseeFrLab/rtauargus and lverweijen/piargus (PiArgus).
 - Credited rtauargus for the ported file-generation logic and protection flow;
   credited PiArgus for DataFrame/result API inspiration and TableResult accessors.
+
+## PR #5 review corrections (2026-10-10)
+
+- Added regressions before fixes for all six API findings and both notebook
+  path findings. Also covered duplicate labels after string conversion and
+  duplicate explanatory/response names, which could silently overwrite data.
+- Preserve the result layout by rejecting reserved diagnostic names (`freq`,
+  `cost`, `status`, `lower`, `upper`) before `protect()` writes files. Apply
+  equivalent checks in the parser and row-based constructor. A frequency
+  table can still use `freq` as its response because it has no extra freq field.
+- Dict columns require equal lengths. Record input uses the first-seen union
+  of keys, filling absent fields with None. Frame adapters read original labels
+  while producing unique string keys, including integer/tuple pandas labels.
+- Reject invalid per-table suppression lengths before file generation while
+  retaining the single-spec table-number rewriting behavior. The DataFrame
+  fallback returns defensive result rows, preserving later safe/status views.
+- Display portable paths in generated batch previews and file-write messages;
+  engine inputs retain actual paths. Rebuilt and executed all three notebooks
+  (**37 code cells**, no errors); saved outputs contain no workstation paths.
+- Verification: **255 Python tests passed, 2 optional polars skips**, plus
+  **3 saved-notebook checks passed**. Both README examples execute in fresh
+  processes, notebook files validate, and their sources match `_build.py`.
