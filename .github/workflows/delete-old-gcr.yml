@@ -39,7 +39,7 @@ jobs:
           id=""
           for page in 1 2 3; do
             hit=$(gh api "/user/packages?package_type=docker&per_page=100&page=$page" \
-              --jq '.[] | select(.name=="trygu/tauargus") | .id')
+              --jq '.[] | select(.name | sub("^trygu/";"") == "tauargus") | .id')
             [ -n "$hit" ] && id=$hit && break
           done
           [ -n "$id" ] || { echo "package trygu/tauargus not found (already deleted?)"; exit 0; }
