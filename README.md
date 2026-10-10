@@ -21,7 +21,7 @@ This is the original Tau-Argus solver code, not a reimplementation:
 - **Engine:** the C/C++ code is largely unchanged. The changes make it build
   with a modern toolchain (CMake, current GCC/Clang/MSVC), switch the solver
   backend to HiGHS, and make it self-contained.
-- **Audit:** the standalone `intervalle.exe` audit program (Pascal) is ported
+- **Audit:** the standalone `intervalle.exe` audit program (Delphi, i.e. modern Pascal) is ported
   into the `csp` engine module, so the feasibility-interval audit runs in-process
   instead of as a separate executable.
 - **Python package:** `pytauargus` is new. Its function signatures and way of
