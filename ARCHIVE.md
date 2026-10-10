@@ -223,3 +223,34 @@ the CSP/HiGHS teardown checkpoint in PROGRESS.md / `docs/native-debugging.md`.)
 ## README rewrite (2026-10-10)
 README rewritten: no Greek letters; top-level project is `tauargus-engine`
 (C/C++ libraries under `engine/`), `pytauargus` is the Python package/CLI using them.
+
+## `.arb` + `.rda` writer ports (2026-10-10)
+Generator-side file writers ported from `references/rtauargus`, so the Python
+package can emit the exact `.arb`/`.rda`/`.hrc` batch inputs our own engine
+parser consumes (fixture generator + round-trip validator).
+
+- `pytauargus/util.py` — `cite`, `norm_path` (R `normalizePath(mustWork=FALSE)`
+  semantics: returns path unchanged when it doesn't resolve, absolute when it
+  does), `df_param_defaut`, `following_dup`, `output_extensions`.
+- `pytauargus/arb.py` — `micro_arb`, `specif_safety`, `suppr_writetable`,
+  `apriori_batch`, `norm_apriori_params` (port of `R/micro_arb.R`).
+- `pytauargus/rda.py` — `write_rda_1var`, `write_rda`, `rda_text` (port of
+  `R/micro_asc_rda.R::write_rda*`; the `.rda` text writer only).
+
+Tests: `tests/test_arb.py`, `tests/test_rda.py`, `tests/test_util.py` — direct
+translations of `test_micro_arb.R`, `test_micro_asc_rda.R` (write_rda block),
+`test_util.R`. All expected values captured by running the pure-R source in
+base R. **174 tests green.**
+
+Port notes / gotchas:
+- macOS: `datetime.now().strftime("%Z")` is empty (libiconv quirk); use
+  `datetime.now().astimezone().strftime(...)` to match R's `Sys.time()` zone.
+- `specif_safety`/`write_rda` build each table's block as one string with
+  embedded `\n`; the *file* is written with a real `writeLines`/join so
+  `<SUPPRESS>`/`<WRITETABLE>` land on separate file lines.
+
+Gaps (intentionally NOT ported): the `micro_asc_rda()` orchestrator that also
+emits the fixed-width `.asc` via `gdata::write.fwf` and computes
+position/width/digits from microdata — a separate `.asc` generator, not part of
+the `.rda` writer. No `.tab`/`.hst` generator, no native `.hrc` getter
+(matches the rtauargus gap list).

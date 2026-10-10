@@ -18,14 +18,14 @@ Goal: HiGHS solvers, portable cloud-native build, headless Python CLI replacing 
   (InseeFrLab v1.3.6). It is a *generator* front-end (writes .tab/.rda/.hrc/.arb),
   opposite side of our *parser+engine*.
 - [x] **HRC writer ported** (2026-10-10): `pytauargus/hrc.py` (port of
-  `rtauargus/R/hrc.R`) — `write_hrc` + helpers, tech-neutral (dict-of-columns in,
-  `.hrc` text out). 30 ported tests in `tests/test_hrc.py`, validated against
-  base-R ground truth. Round-trip guard (write→lead-strip) added.
+  `rtauargus/R/hrc.R`) — `write_hrc` + helpers, tech-neutral. 30 tests in
+  `tests/test_hrc.py`, validated against base-R ground truth.
+- [x] **`.arb` + `.rda` writers ported** (2026-10-10): `arb.py`
+  (`micro_arb`+`specif_safety`/`suppr_writetable`/`apriori_batch`), `rda.py`
+  (`write_rda`), `util.py` (`cite`/`norm_path`/`df_param_defaut`/`following_dup`).
+  174 tests green; validated vs base-R ground truth. Details in ARCHIVE.md.
 
 ## Next (priority order)
-0. Port remaining rtauargus tests: micro `.rda` writer + `.arb` text contract
-   (`test_micro_arb.R`, `test_micro_asc_rda.R`); bring in non-duplicated test
-   data; document gaps (no `.tab`/`.hst` generator, no `.hrc` native getter).
 1. Validate Linux/Windows legs of wheels.yml in CI; publish first release.
 2. Task 1: document solver strategy (legacy roles → HiGHS); Dockerfile.
 3. **ANSI-UI (SPLIT OUT, `docs/ui-design.md`)**: TUI vs headless-CLI-only (rec: headless).
