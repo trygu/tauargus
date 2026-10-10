@@ -16,6 +16,7 @@ Goal: HiGHS solvers, portable cloud-native build, headless Python CLI replacing 
 - [x] **`micro.py` rda bug fixed**: `write_rda_1var` dropped the `\n` before
   the first body line (R `paste(sep="\n")` contract); `test_micro.py` split
   fixed (R `strsplit` = regex, applied per block). 177 tests green.
+- [x] Positive OPT/MOD time-limit regressions + corrected audit docs (ARCHIVE).
 
 ## Next (priority order)
 1. **GHCR rename → `tauargus-engine`** — 0.2.1 verified (`:0.2.1`+`:latest`).
@@ -26,9 +27,7 @@ Goal: HiGHS solvers, portable cloud-native build, headless Python CLI replacing 
    `textual` TUI as own PyPI `pytauargus-tui` (`bindings/tui/`). TUI on `tui` branch.
 
 ## Watch items
-- OPT/MOD nonzero `max_time` → deterministic segfault (solver time-limit);
-  notebooks/READMEs use `0`. (`Highs_destroy` segfault FIXED 2026-10-07 —
-  `docs/native-debugging.md`.)
+- OPT/MOD deadline expiry needs separate coverage; positive limits pass.
 - `open_microdata` calls `clean_all` — safe only because tables finalize after.
 - Parquet as the microdata dataframe backend (not started).
 - **Ref: `piargus`** (`references/piargus`, lverweijen) — Python τ-ARGUS
